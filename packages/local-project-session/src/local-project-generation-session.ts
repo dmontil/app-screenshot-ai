@@ -1,12 +1,16 @@
 import { GenerateStorePackError, GenerateStorePackUseCase, type SourceScreenshotLoaderPort } from "@app-screenshot-ai/ai-pipeline";
+import { EvaluateStoreSetUseCase } from "@app-screenshot-ai/evaluator";
+import { ExportStorePackUseCase } from "@app-screenshot-ai/export-engine";
 import type { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import type { ModelGateway } from "@app-screenshot-ai/model-gateway";
 import type { PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import { RenderStoreSetUseCase } from "@app-screenshot-ai/render-engine";
 import type {
   AppInput,
   ExportManifest,
   InputReadinessReport,
   QualityReport,
+  RenderedAsset,
   RenderTarget,
   Storyboard,
   VisualSystem,
@@ -28,9 +32,18 @@ export type GenerateLocalStorePackParams = {
   target: RenderTarget;
 };
 
+export type RerenderLocalStorePackParams = {
+  projectId: string;
+  visualSystem: VisualSystem;
+  storyboard: Storyboard;
+  locale: string;
+  label?: string;
+  persist?: boolean;
+};
+
 export type LocalStorePackResult = {
   projectId: string;
-  generationId: string;
+  generationId?: string;
   provider: string;
   model: string;
   screenshots: Array<{ fileName: string; contentType: "image/png" | "image/jpeg"; bytes: Uint8Array }>;
@@ -53,6 +66,51 @@ export class LocalProjectGenerationSession {
     this.modelGateway = options.modelGateway;
     this.patternLibrary = options.patternLibrary;
     this.sourceScreenshotLoader = options.sourceScreenshotLoader;
+  }
+
+  async rerenderStorePack(params: RerenderLocalStorePackParams): Promise<LocalStorePackResult> {
+    const renderer = new RenderStoreSetUseCase();
+    const assets = await renderer.execute({
+      visualSystem: params.visualSystem,
+      storyboard: params.storyboard,
+      target: { store: "app-store", device: "iphone-6.9", locale: params.locale, width: 1320, height: 2868 },
+      ...(this.sourceScreenshotLoader
+        ? { loadSourceScreenshot: (sourcePath: string) => this.sourceScreenshotLoader!.load(sourcePath) }
+        : {}),
+    });
+    const qualityReport = new EvaluateStoreSetUseCase().execute({ assets, screens: params.storyboard.screens });
+    const exported = await new ExportStorePackUseCase().execute({ assets });
+    const zipName = `${params.projectId}-store-pack.zip`;
+    const shouldPersist = params.persist !== false;
+
+    const generation = shouldPersist
+      ? await this.saveGeneration({
+          projectId: params.projectId,
+          kind: "manual-rerender",
+          label: params.label ?? "Manual rerender",
+          visualSystem: params.visualSystem,
+          storyboard: params.storyboard,
+          assets,
+          qualityReport,
+          exportManifest: exported.manifest,
+          zipName,
+          zipBytes: exported.zipBytes,
+        })
+      : undefined;
+
+    return {
+      projectId: params.projectId,
+      ...(generation ? { generationId: generation.generationId } : {}),
+      provider: "manual",
+      model: "manual-rerender",
+      screenshots: assets.map((asset) => ({ fileName: asset.fileName, contentType: asset.contentType, bytes: asset.bytes })),
+      qualityReport,
+      visualSystem: params.visualSystem,
+      storyboard: params.storyboard,
+      exportManifest: exported.manifest,
+      zip: { fileName: zipName, bytes: exported.zipBytes },
+      localProjectPath: `.local/projects/${params.projectId}`,
+    };
   }
 
   async generateStorePack(params: GenerateLocalStorePackParams): Promise<LocalStorePackResult> {
@@ -122,6 +180,40 @@ export class LocalProjectGenerationSession {
       }
       throw error;
     }
+  }
+
+  private async saveGeneration(params: {
+    projectId: string;
+    kind: "ai-generate" | "manual-rerender";
+    label: string;
+    visualSystem: VisualSystem;
+    storyboard: Storyboard;
+    assets: RenderedAsset[];
+    qualityReport: QualityReport;
+    exportManifest: ExportManifest;
+    zipName: string;
+    zipBytes: Uint8Array;
+  }) {
+    await Promise.all([
+      this.store.writeArtifact({ projectId: params.projectId, name: "storyboard", value: params.storyboard }),
+      this.store.writeArtifact({ projectId: params.projectId, name: "quality-report", value: params.qualityReport }),
+      this.store.writeArtifact({ projectId: params.projectId, name: "export-manifest", value: params.exportManifest }),
+      ...params.assets.map((asset) => this.store.writeRender({ projectId: params.projectId, fileName: asset.fileName, bytes: asset.bytes })),
+      this.store.writeExport({ projectId: params.projectId, fileName: params.zipName, bytes: params.zipBytes }),
+    ]);
+
+    return this.store.writeGeneration({
+      projectId: params.projectId,
+      kind: params.kind,
+      label: params.label,
+      visualSystem: params.visualSystem,
+      storyboard: params.storyboard,
+      assets: params.assets,
+      qualityReport: params.qualityReport,
+      exportManifest: params.exportManifest,
+      zipFileName: params.zipName,
+      zipBytes: params.zipBytes,
+    });
   }
 
   private async writeBlockedReadiness(projectId: string, readiness: InputReadinessReport): Promise<void> {

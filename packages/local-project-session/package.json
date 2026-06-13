@@ -14,7 +14,10 @@
     "@app-screenshot-ai/local-project-store": "0.1.0",
     "@app-screenshot-ai/model-gateway": "0.1.0",
     "@app-screenshot-ai/pattern-library": "0.1.0",
-    "@app-screenshot-ai/schemas": "0.1.0"
+    "@app-screenshot-ai/schemas": "0.1.0",
+    "@app-screenshot-ai/evaluator": "0.1.0",
+    "@app-screenshot-ai/export-engine": "0.1.0",
+    "@app-screenshot-ai/render-engine": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

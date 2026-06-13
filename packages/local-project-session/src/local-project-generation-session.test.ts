@@ -6,7 +6,7 @@ import { GenerateStorePackError } from "@app-screenshot-ai/ai-pipeline";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { ModelGateway, type ModelProviderPort } from "@app-screenshot-ai/model-gateway";
 import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
-import type { AppInput } from "@app-screenshot-ai/schemas";
+import type { AppInput, Storyboard, VisualSystem } from "@app-screenshot-ai/schemas";
 import { describe, expect, it } from "vitest";
 
 import { LocalProjectGenerationSession } from "./local-project-generation-session";
@@ -68,6 +68,17 @@ function patternLibrary() {
   ]);
 }
 
+const visualSystem: VisualSystem = {
+  id: "warm-editorial-v1",
+  palette: { background: "#F7F1E7", primary: "#3B2416", accent: "#D99A32", text: "#24160F" },
+  typography: { headlineFamily: "Inter", headlineWeight: 760 },
+  layout: { safeMargin: 96, headlineY: 180, deviceY: 720, deviceWidthRatio: 0.62 },
+};
+
+const editedStoryboard: Storyboard = {
+  screens: [{ id: "hook", index: 1, role: "hook", headline: "Edited route copy", sourceScreenshotPath: "input/home.png" }],
+};
+
 describe("LocalProjectGenerationSession", () => {
   it("blocks unready input before provider generation and does not save a completed generation", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "app-screenshot-ai-session-"));
@@ -106,6 +117,63 @@ describe("LocalProjectGenerationSession", () => {
     }
   });
 
+  it("rerenders edited storyboard copy and saves a manual generation", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "app-screenshot-ai-session-"));
+    try {
+      const store = new LocalProjectStore({ rootDir });
+      await store.createProject({ projectId: "literarytrip", input: appInput });
+      const session = new LocalProjectGenerationSession({
+        store,
+        modelGateway: fakeGateway({ async generateObject() { throw new Error("provider should not be called"); } }),
+        patternLibrary: patternLibrary(),
+      });
+
+      const result = await session.rerenderStorePack({
+        projectId: "literarytrip",
+        visualSystem,
+        storyboard: editedStoryboard,
+        locale: "en-US",
+        label: "Manual edit",
+        persist: true,
+      });
+
+      expect(result.generationId).toMatch(/^gen-/);
+      expect(result.storyboard.screens[0]?.headline).toBe("Edited route copy");
+      expect(result.zip.fileName).toBe("literarytrip-store-pack.zip");
+      expect(result.screenshots[0]?.fileName).toBe("01-hook.png");
+
+      const generation = await store.readGeneration("literarytrip", result.generationId!);
+      expect(generation.kind).toBe("manual-rerender");
+      expect(generation.label).toBe("Manual edit");
+      expect(generation.storyboard.screens[0]?.headline).toBe("Edited route copy");
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  }, 10_000);
+
+  it("can return an unsaved manual preview without adding a generation", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "app-screenshot-ai-session-"));
+    try {
+      const store = new LocalProjectStore({ rootDir });
+      await store.createProject({ projectId: "literarytrip", input: appInput });
+      const session = new LocalProjectGenerationSession({ store, modelGateway: fakeGateway(), patternLibrary: patternLibrary() });
+
+      const result = await session.rerenderStorePack({
+        projectId: "literarytrip",
+        visualSystem,
+        storyboard: editedStoryboard,
+        locale: "en-US",
+        persist: false,
+      });
+
+      expect(result.generationId).toBeUndefined();
+      expect(result.screenshots).toHaveLength(1);
+      expect((await store.listProjects())[0]?.generations).toEqual([]);
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  }, 10_000);
+
   it("generates and saves a versioned local project store pack", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "app-screenshot-ai-session-"));
     try {
@@ -139,7 +207,7 @@ describe("LocalProjectGenerationSession", () => {
       expect(result.exportManifest.items[0]?.path).toBe("app-store/iphone-6.9/en-US/01-hook.png");
       expect(result.zip.bytes.byteLength).toBeGreaterThan(0);
 
-      const generation = await new LocalProjectStore({ rootDir }).readGeneration("literarytrip", result.generationId);
+      const generation = await new LocalProjectStore({ rootDir }).readGeneration("literarytrip", result.generationId!);
       expect(generation.label).toBe("AI generation");
       expect(generation.storyboard.screens[0]?.headline).toBe("Turn books into routes");
       expect(generation.renders[0]?.fileName).toBe("01-hook.png");

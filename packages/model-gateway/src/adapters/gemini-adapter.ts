@@ -1,4 +1,5 @@
 import { ModelGatewayError, type ModelProviderPort } from "../model-gateway";
+import { buildStructuredObjectPrompt, parseStructuredJsonText, requireStructuredText } from "./structured-provider-request";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -41,7 +42,7 @@ export class GeminiAdapter implements ModelProviderPort {
           {
             parts: [
               {
-                text: buildPrompt(params.task, params.input),
+                text: buildStructuredObjectPrompt(params.task, params.input),
               },
             ],
           },
@@ -59,31 +60,9 @@ export class GeminiAdapter implements ModelProviderPort {
       throw normalizeGeminiError(data, response.status);
     }
 
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) {
-      throw new ModelGatewayError({
-        code: "unknown_provider_error",
-        provider: "gemini",
-        retryable: true,
-        message: "Gemini returned an empty response.",
-      });
-    }
-
-    try {
-      return JSON.parse(rawText) as unknown;
-    } catch {
-      throw new ModelGatewayError({
-        code: "schema_validation_failed",
-        provider: "gemini",
-        retryable: false,
-        message: "Gemini returned invalid JSON.",
-      });
-    }
+    const rawText = requireStructuredText({ provider: "gemini", rawText: data.candidates?.[0]?.content?.parts?.[0]?.text });
+    return parseStructuredJsonText({ provider: "gemini", rawText });
   }
-}
-
-function buildPrompt(task: string, input: unknown): string {
-  return `You are App Screenshot AI. Task: ${task}. Return only valid JSON.\n\nInput:\n${JSON.stringify(input, null, 2)}`;
 }
 
 function normalizeGeminiError(data: GeminiResponse, httpStatus: number): ModelGatewayError {

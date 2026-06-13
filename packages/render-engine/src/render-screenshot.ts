@@ -1,6 +1,7 @@
 import sharp from "sharp";
 
 import type { RenderedAsset, RenderTarget, ScreenPlan, VisualSystem } from "@app-screenshot-ai/schemas";
+import { resolveRenderTreatment } from "./render-treatment";
 
 export type RenderScreenshotInput = {
   visualSystem: VisualSystem;
@@ -49,12 +50,14 @@ export class RenderScreenshotUseCase {
 }
 
 function buildSvg(input: RenderScreenshotInput): string {
-  const family = input.visualSystem.layoutFamily;
-  const treatment = input.screenPlan.treatment;
+  const treatment = resolveRenderTreatment({
+    layoutFamily: input.visualSystem.layoutFamily,
+    treatment: input.screenPlan.treatment,
+  });
 
-  if (family === "cinematic-atlas" || treatment === "cinematic-poster") return cinematicAtlasSvg(input);
-  if (family === "premium-proof-cards" || treatment === "premium-proof-card") return premiumCardsSvg(input);
-  if (family === "map-route-editorial" || treatment === "map-route-editorial") return mapRouteEditorialSvg(input);
+  if (treatment === "cinematic-atlas") return cinematicAtlasSvg(input);
+  if (treatment === "premium-proof-cards") return premiumCardsSvg(input);
+  if (treatment === "map-route-editorial") return mapRouteEditorialSvg(input);
   return classicSvg(input);
 }
 

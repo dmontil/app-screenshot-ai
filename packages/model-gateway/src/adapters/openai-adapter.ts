@@ -1,4 +1,5 @@
 import { ModelGatewayError, type ModelProviderPort } from "../model-gateway";
+import { buildStructuredObjectPrompt, parseStructuredJsonText, requireStructuredText } from "./structured-provider-request";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 
@@ -42,7 +43,7 @@ export class OpenAIAdapter implements ModelProviderPort {
       },
       body: JSON.stringify({
         model: params.model,
-        input: buildPrompt(params.task, params.input),
+        input: buildStructuredObjectPrompt(params.task, params.input),
         text: { format: { type: "json_object" } },
         temperature: 0.4,
       }),
@@ -54,32 +55,9 @@ export class OpenAIAdapter implements ModelProviderPort {
       throw normalizeOpenAIError(data, response.status);
     }
 
-    const rawText = data.output_text ?? data.output?.flatMap((item) => item.content ?? []).find((item) => item.text)?.text;
-
-    if (!rawText) {
-      throw new ModelGatewayError({
-        code: "unknown_provider_error",
-        provider: "openai",
-        retryable: true,
-        message: "OpenAI returned an empty response.",
-      });
-    }
-
-    try {
-      return JSON.parse(rawText) as unknown;
-    } catch {
-      throw new ModelGatewayError({
-        code: "schema_validation_failed",
-        provider: "openai",
-        retryable: false,
-        message: "OpenAI returned invalid JSON.",
-      });
-    }
+    const rawText = requireStructuredText({ provider: "openai", rawText: data.output_text ?? data.output?.flatMap((item) => item.content ?? []).find((item) => item.text)?.text });
+    return parseStructuredJsonText({ provider: "openai", rawText });
   }
-}
-
-function buildPrompt(task: string, input: unknown): string {
-  return `You are App Screenshot AI. Task: ${task}. Return only valid JSON.\n\nInput:\n${JSON.stringify(input, null, 2)}`;
 }
 
 function normalizeOpenAIError(data: OpenAIResponse, httpStatus: number): ModelGatewayError {

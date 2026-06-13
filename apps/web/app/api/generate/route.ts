@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { GenerateStorePackUseCase } from "@app-screenshot-ai/ai-pipeline";
+import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-session";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { createModelGateway, type SupportedProvider } from "@app-screenshot-ai/model-gateway";
 import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
@@ -29,13 +29,11 @@ export async function POST(request: Request) {
       ...(openaiApiKey ? { openaiApiKey } : {}),
     });
 
-    const patternLibrary = createDefaultPatternLibrary();
     const store = new LocalProjectStore({ rootDir: path.join(root, ".local", "projects") });
-    await store.createProject({ projectId, input });
-
-    const useCase = new GenerateStorePackUseCase({
+    const session = new LocalProjectGenerationSession({
+      store,
       modelGateway: gateway,
-      patternLibrary,
+      patternLibrary: createDefaultPatternLibrary(),
       sourceScreenshotLoader: {
         async load(sourcePath) {
           return {
@@ -47,63 +45,42 @@ export async function POST(request: Request) {
     });
 
     const model = readString(form.get("model")) || defaultModelFor(provider);
-    const result = await useCase.execute({
+    const result = await session.generateStorePack({
+      projectId,
       input,
       provider,
       model,
+      label: readString(form.get("generationLabel")) || "AI generation",
       target: { store: "app-store", device: "iphone-6.9", locale: input.baseLocale, width: 1320, height: 2868 },
     });
 
-    await Promise.all([
-      store.writeArtifact({ projectId, name: "input-readiness", value: result.readiness }),
-      store.writeArtifact({ projectId, name: "patterns", value: result.patterns }),
-      store.writeArtifact({ projectId, name: "visual-system", value: result.visualSystem }),
-      store.writeArtifact({ projectId, name: "storyboard", value: result.storyboard }),
-      store.writeArtifact({ projectId, name: "quality-report", value: result.qualityReport }),
-      store.writeArtifact({ projectId, name: "export-manifest", value: result.exportManifest }),
-    ]);
-
-    for (const asset of result.assets) {
-      await store.writeRender({ projectId, fileName: asset.fileName, bytes: asset.bytes });
-    }
-    const zipName = `${projectId}-store-pack.zip`;
-    await store.writeExport({ projectId, fileName: zipName, bytes: result.zipBytes });
-    const generation = await store.writeGeneration({
-      projectId,
-      kind: "ai-generate",
-      label: readString(form.get("generationLabel")) || "AI generation",
-      visualSystem: result.visualSystem,
-      storyboard: result.storyboard,
-      assets: result.assets,
-      qualityReport: result.qualityReport,
-      exportManifest: result.exportManifest,
-      zipFileName: zipName,
-      zipBytes: result.zipBytes,
-    });
-
-    return Response.json({
-      projectId,
-      generationId: generation.generationId,
-      provider,
-      model,
-      screenshots: result.assets.map((asset) => ({
-        fileName: asset.fileName,
-        dataUrl: `data:${asset.contentType};base64,${Buffer.from(asset.bytes).toString("base64")}`,
-      })),
-      qualityReport: result.qualityReport,
-      visualSystem: result.visualSystem,
-      storyboard: result.storyboard,
-      exportManifest: result.exportManifest,
-      zip: {
-        fileName: zipName,
-        dataUrl: `data:application/zip;base64,${Buffer.from(result.zipBytes).toString("base64")}`,
-      },
-      localProjectPath: `.local/projects/${projectId}`,
-    });
+    return Response.json(toGenerateResponse(result));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return Response.json({ error: message }, { status: 400 });
   }
+}
+
+function toGenerateResponse(result: Awaited<ReturnType<LocalProjectGenerationSession["generateStorePack"]>>) {
+  return {
+    projectId: result.projectId,
+    generationId: result.generationId,
+    provider: result.provider,
+    model: result.model,
+    screenshots: result.screenshots.map((asset) => ({
+      fileName: asset.fileName,
+      dataUrl: `data:${asset.contentType};base64,${Buffer.from(asset.bytes).toString("base64")}`,
+    })),
+    qualityReport: result.qualityReport,
+    visualSystem: result.visualSystem,
+    storyboard: result.storyboard,
+    exportManifest: result.exportManifest,
+    zip: {
+      fileName: result.zip.fileName,
+      dataUrl: `data:application/zip;base64,${Buffer.from(result.zip.bytes).toString("base64")}`,
+    },
+    localProjectPath: `.local/projects/${result.projectId}`,
+  };
 }
 
 function appRoot(): string {

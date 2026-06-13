@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { EvaluateStoreSetUseCase } from "@app-screenshot-ai/evaluator";
-import { ExportStorePackUseCase } from "@app-screenshot-ai/export-engine";
+import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-session";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
-import { RenderStoreSetUseCase } from "@app-screenshot-ai/render-engine";
+import { ModelGateway } from "@app-screenshot-ai/model-gateway";
+import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
 import { StoryboardSchema, VisualSystemSchema } from "@app-screenshot-ai/schemas";
 
 export const runtime = "nodejs";
@@ -17,53 +17,42 @@ export async function POST(request: Request) {
     const visualSystem = VisualSystemSchema.parse(body.visualSystem);
     const storyboard = StoryboardSchema.parse(body.storyboard);
 
-    const renderer = new RenderStoreSetUseCase();
-    const assets = await renderer.execute({
-      visualSystem,
-      storyboard,
-      target: { store: "app-store", device: "iphone-6.9", locale, width: 1320, height: 2868 },
-      async loadSourceScreenshot(sourcePath) {
-        return {
-          bytes: new Uint8Array(await readFile(sourcePath)),
-          contentType: sourcePath.endsWith(".jpg") || sourcePath.endsWith(".jpeg") ? "image/jpeg" : "image/png",
-        };
+    const session = new LocalProjectGenerationSession({
+      store: new LocalProjectStore({ rootDir: path.join(appRoot(), ".local", "projects") }),
+      modelGateway: new ModelGateway({ providers: {} }),
+      patternLibrary: new PatternLibrary([]),
+      sourceScreenshotLoader: {
+        async load(sourcePath) {
+          return {
+            bytes: new Uint8Array(await readFile(sourcePath)),
+            contentType: sourcePath.endsWith(".jpg") || sourcePath.endsWith(".jpeg") ? "image/jpeg" : "image/png",
+          };
+        },
       },
     });
 
-    const qualityReport = new EvaluateStoreSetUseCase().execute({ assets, screens: storyboard.screens });
-    const exported = await new ExportStorePackUseCase().execute({ assets });
-    const zipName = `${projectId}-store-pack.zip`;
-
-    const shouldPersist = body.persist !== false;
-    const store = new LocalProjectStore({ rootDir: path.join(appRoot(), ".local", "projects") });
-    const generation = shouldPersist
-      ? await saveManualGeneration({
-          store,
-          projectId,
-          label: typeof body.label === "string" && body.label.trim() ? body.label.trim() : "Manual rerender",
-          visualSystem,
-          storyboard,
-          assets,
-          qualityReport,
-          exportManifest: exported.manifest,
-          zipName,
-          zipBytes: exported.zipBytes,
-        })
-      : undefined;
+    const result = await session.rerenderStorePack({
+      projectId,
+      locale,
+      visualSystem,
+      storyboard,
+      label: typeof body.label === "string" && body.label.trim() ? body.label.trim() : "Manual rerender",
+      persist: body.persist !== false,
+    });
 
     return Response.json({
-      projectId,
-      ...(generation ? { generationId: generation.generationId } : {}),
-      screenshots: assets.map((asset) => ({
+      projectId: result.projectId,
+      ...(result.generationId ? { generationId: result.generationId } : {}),
+      screenshots: result.screenshots.map((asset) => ({
         fileName: asset.fileName,
         dataUrl: `data:${asset.contentType};base64,${Buffer.from(asset.bytes).toString("base64")}`,
       })),
-      qualityReport,
-      storyboard,
-      exportManifest: exported.manifest,
+      qualityReport: result.qualityReport,
+      storyboard: result.storyboard,
+      exportManifest: result.exportManifest,
       zip: {
-        fileName: zipName,
-        dataUrl: `data:application/zip;base64,${Buffer.from(exported.zipBytes).toString("base64")}`,
+        fileName: result.zip.fileName,
+        dataUrl: `data:application/zip;base64,${Buffer.from(result.zip.bytes).toString("base64")}`,
       },
       localProjectPath: `.local/projects/${projectId}`,
     });
@@ -71,40 +60,6 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return Response.json({ error: message }, { status: 400 });
   }
-}
-
-async function saveManualGeneration(params: {
-  store: LocalProjectStore;
-  projectId: string;
-  label: string;
-  visualSystem: Awaited<ReturnType<typeof VisualSystemSchema.parse>>;
-  storyboard: Awaited<ReturnType<typeof StoryboardSchema.parse>>;
-  assets: Awaited<ReturnType<RenderStoreSetUseCase["execute"]>>;
-  qualityReport: ReturnType<EvaluateStoreSetUseCase["execute"]>;
-  exportManifest: Awaited<ReturnType<ExportStorePackUseCase["execute"]>>["manifest"];
-  zipName: string;
-  zipBytes: Uint8Array;
-}) {
-  await Promise.all([
-    params.store.writeArtifact({ projectId: params.projectId, name: "storyboard", value: params.storyboard }),
-    params.store.writeArtifact({ projectId: params.projectId, name: "quality-report", value: params.qualityReport }),
-    params.store.writeArtifact({ projectId: params.projectId, name: "export-manifest", value: params.exportManifest }),
-    ...params.assets.map((asset) => params.store.writeRender({ projectId: params.projectId, fileName: asset.fileName, bytes: asset.bytes })),
-    params.store.writeExport({ projectId: params.projectId, fileName: params.zipName, bytes: params.zipBytes }),
-  ]);
-
-  return params.store.writeGeneration({
-    projectId: params.projectId,
-    kind: "manual-rerender",
-    label: params.label,
-    visualSystem: params.visualSystem,
-    storyboard: params.storyboard,
-    assets: params.assets,
-    qualityReport: params.qualityReport,
-    exportManifest: params.exportManifest,
-    zipFileName: params.zipName,
-    zipBytes: params.zipBytes,
-  });
 }
 
 function appRoot(): string {

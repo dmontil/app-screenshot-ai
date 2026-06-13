@@ -1,19 +1,15 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { GenerateStorePackUseCase } from "@app-screenshot-ai/ai-pipeline";
+import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-session";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { createModelGatewayFromEnv } from "@app-screenshot-ai/model-gateway";
 import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
-import { AppInputSchema, type AppInput } from "@app-screenshot-ai/schemas";
+import { AppInputSchema } from "@app-screenshot-ai/schemas";
 
 const root = process.cwd();
 
-type CliArgs = {
-  inputPath: string;
-  projectId: string;
-  outputDir: string;
-};
+type CliArgs = { inputPath: string; projectId: string; outputDir: string };
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -23,13 +19,10 @@ async function main() {
   await mkdir(path.join(args.outputDir, "screenshots"), { recursive: true });
 
   const { gateway, provider, model } = createModelGatewayFromEnv();
-  const patternLibrary = createDefaultPatternLibrary();
-  const store = new LocalProjectStore({ rootDir: path.join(root, ".local", "projects") });
-  await store.createProject({ projectId: args.projectId, input });
-
-  const useCase = new GenerateStorePackUseCase({
+  const session = new LocalProjectGenerationSession({
+    store: new LocalProjectStore({ rootDir: path.join(root, ".local", "projects") }),
     modelGateway: gateway,
-    patternLibrary,
+    patternLibrary: createDefaultPatternLibrary(),
     sourceScreenshotLoader: {
       async load(sourcePath) {
         const absolutePath = path.isAbsolute(sourcePath) ? sourcePath : path.join(root, sourcePath);
@@ -41,50 +34,27 @@ async function main() {
     },
   });
 
-  const result = await useCase.execute({
+  const result = await session.generateStorePack({
+    projectId: args.projectId,
     input,
     provider,
     model,
+    label: "CLI generation",
     target: { store: "app-store", device: "iphone-6.9", locale: input.baseLocale, width: 1320, height: 2868 },
   });
 
-  await writeJson(args.outputDir, "input-readiness.json", result.readiness);
-  await writeJson(args.outputDir, "patterns.json", result.patterns);
   await writeJson(args.outputDir, "visual-system.json", result.visualSystem);
   await writeJson(args.outputDir, "storyboard.json", result.storyboard);
   await writeJson(args.outputDir, "quality-report.json", result.qualityReport);
   await writeJson(args.outputDir, "export-manifest.json", result.exportManifest);
 
-  await store.writeArtifact({ projectId: args.projectId, name: "input-readiness", value: result.readiness });
-  await store.writeArtifact({ projectId: args.projectId, name: "patterns", value: result.patterns });
-  await store.writeArtifact({ projectId: args.projectId, name: "visual-system", value: result.visualSystem });
-  await store.writeArtifact({ projectId: args.projectId, name: "storyboard", value: result.storyboard });
-  await store.writeArtifact({ projectId: args.projectId, name: "quality-report", value: result.qualityReport });
-  await store.writeArtifact({ projectId: args.projectId, name: "export-manifest", value: result.exportManifest });
-
-  for (const asset of result.assets) {
+  for (const asset of result.screenshots) {
     await writeFile(path.join(args.outputDir, "screenshots", asset.fileName), asset.bytes);
-    await store.writeRender({ projectId: args.projectId, fileName: asset.fileName, bytes: asset.bytes });
   }
+  await writeFile(path.join(args.outputDir, result.zip.fileName), result.zip.bytes);
 
-  const zipName = `${args.projectId}-store-pack.zip`;
-  await writeFile(path.join(args.outputDir, zipName), result.zipBytes);
-  await store.writeExport({ projectId: args.projectId, fileName: zipName, bytes: result.zipBytes });
-  const generation = await store.writeGeneration({
-    projectId: args.projectId,
-    kind: "ai-generate",
-    label: "CLI generation",
-    visualSystem: result.visualSystem,
-    storyboard: result.storyboard,
-    assets: result.assets,
-    qualityReport: result.qualityReport,
-    exportManifest: result.exportManifest,
-    zipFileName: zipName,
-    zipBytes: result.zipBytes,
-  });
-
-  console.log(`Generated ${result.assets.length} screenshots with ${provider}/${model}`);
-  console.log(`Generation: ${generation.generationId}`);
+  console.log(`Generated ${result.screenshots.length} screenshots with ${provider}/${model}`);
+  console.log(`Generation: ${result.generationId}`);
   console.log(`Output: ${path.relative(root, args.outputDir)}`);
   console.log(`Local project: ${path.relative(root, path.join(root, ".local", "projects", args.projectId))}`);
 }
