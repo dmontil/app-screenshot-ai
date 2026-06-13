@@ -1,0 +1,7 @@
+node_modules
+.next
+.local
+.DS_Store
+.env
+.env.local
+examples/**/output

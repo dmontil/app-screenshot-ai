@@ -1,0 +1,29 @@
+{
+  "appName": "My App",
+  "category": "productivity",
+  "targetAudience": "busy professionals",
+  "mainValueProposition": "plan the day without overwhelm",
+  "targetStores": ["app-store"],
+  "baseLocale": "en-US",
+  "screenshots": [
+    {
+      "id": "home",
+      "path": "absolute/or/relative/path/to/home.png",
+      "kind": "functional"
+    },
+    {
+      "id": "detail",
+      "path": "absolute/or/relative/path/to/detail.png",
+      "kind": "functional"
+    },
+    {
+      "id": "result",
+      "path": "absolute/or/relative/path/to/result.png",
+      "kind": "functional"
+    }
+  ],
+  "brand": {
+    "colors": ["#155EEF", "#F7F4EF", "#111827"],
+    "websiteUrl": "https://example.com"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "appName": "LiteraryTrip",
+  "category": "travel",
+  "targetAudience": "readers who travel",
+  "mainValueProposition": "turn books into walkable routes",
+  "targetStores": ["app-store"],
+  "baseLocale": "en-US",
+  "screenshots": [
+    { "id": "home", "path": "examples/literarytrip/input/screenshots/home.png", "kind": "functional" },
+    { "id": "search", "path": "examples/literarytrip/input/screenshots/search.png", "kind": "functional" },
+    { "id": "map", "path": "examples/literarytrip/input/screenshots/map.png", "kind": "functional" }
+  ]
+}
