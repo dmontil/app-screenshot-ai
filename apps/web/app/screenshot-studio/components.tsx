@@ -392,7 +392,7 @@ export function AdvancedInspector({ result, storyboard }: { result: GenerateResp
             <InspectorBlock title="Local project" value={{ path: result.localProjectPath, provider: result.provider, model: result.model, generationId: result.generationId }} />
             <InspectorBlock title="Quality report" value={result.qualityReport} />
             <InspectorBlock title="VisualSystem + Storyboard" value={{ visualSystem: result.visualSystem, storyboard: storyboard ?? result.storyboard }} />
-            <InspectorBlock title="Premium planning" value={{ brandKit: result.brandKit, productUnderstanding: result.productUnderstanding, premiumRecipes: result.premiumRecipes, sceneSet: result.sceneSet }} />
+            <InspectorBlock title="Premium planning" value={{ brandKit: result.brandKit, productUnderstanding: result.productUnderstanding, premiumRecipes: result.premiumRecipes, premiumCandidates: result.premiumCandidates, sceneSet: result.sceneSet }} />
             <InspectorBlock title="Export manifest" value={result.exportManifest} />
           </div>
         )}

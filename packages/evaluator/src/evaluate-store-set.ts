@@ -71,7 +71,7 @@ function evaluatePremiumSceneSet(sceneSet: SceneSet): NonNullable<QualityReport[
   const scenes = sceneSet.scenes;
   const sceneCount = Math.max(1, scenes.length);
   const compositionDiversity = Math.min(1, new Set(scenes.map((scene) => scene.composition)).size / Math.min(5, sceneCount));
-  const objectDepth = scenes.filter((scene) => scene.objects.length > 0).length / sceneCount;
+  const objectDepth = Math.min(1, scenes.reduce((total, scene) => total + scene.objects.length, 0) / (sceneCount * 1.6));
   const deviceRichness = scenes.filter((scene) => scene.devices.length > 1 || scene.devices.some((device) => device.crop !== "full" || Math.abs(device.tilt) >= 6)).length / sceneCount;
   const continuity = Math.min(1, (
     (sceneSet.continuity.recurringObjects.length > 0 ? 0.4 : 0) +

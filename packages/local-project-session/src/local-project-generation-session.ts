@@ -61,6 +61,7 @@ export type LocalStorePackResult = {
   brandKit?: BrandKit;
   productUnderstanding?: ProductUnderstanding;
   premiumRecipes?: PremiumRecipe[];
+  premiumCandidates?: Array<{ variant: string; sceneSet: SceneSet; qualityReport: QualityReport }>;
   sceneSet?: SceneSet;
 };
 
@@ -151,6 +152,7 @@ export class LocalProjectGenerationSession {
         this.store.writeArtifact({ projectId: params.projectId, name: "brand-kit", value: result.brandKit }),
         this.store.writeArtifact({ projectId: params.projectId, name: "product-understanding", value: result.productUnderstanding }),
         this.store.writeArtifact({ projectId: params.projectId, name: "premium-recipes", value: result.premiumRecipes }),
+        this.store.writeArtifact({ projectId: params.projectId, name: "premium-candidates", value: result.premiumCandidates }),
         ...(result.sceneSet ? [this.store.writeArtifact({ projectId: params.projectId, name: "scene-set", value: result.sceneSet })] : []),
       ]);
 
@@ -192,6 +194,7 @@ export class LocalProjectGenerationSession {
         brandKit: result.brandKit,
         productUnderstanding: result.productUnderstanding,
         premiumRecipes: result.premiumRecipes,
+        premiumCandidates: result.premiumCandidates,
         ...(result.sceneSet ? { sceneSet: result.sceneSet } : {}),
       };
     } catch (error) {

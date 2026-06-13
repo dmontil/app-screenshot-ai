@@ -77,6 +77,7 @@ function buildSceneSvg(input: RenderSceneSetInput & { scene: Scene; loadedDevice
   return svgShell(target, `
     <defs>${sceneDefs(input, frames)}</defs>
     ${renderBackground(input)}
+    ${renderArtDirectionLayer(input)}
     ${renderContinuityMotif(input)}
     ${renderCompositionBackdrop(input)}
     ${renderSceneObjects(input, "behind")}
@@ -118,6 +119,103 @@ function renderBackground(input: RenderSceneSetInput & { scene: Scene }): string
     <circle cx="${target.width * 0.16}" cy="${target.height * 0.76}" r="330" fill="${escapeXml(primary)}" opacity="0.09" />
     <circle cx="${target.width * 0.86}" cy="${target.height * 0.23}" r="240" fill="${escapeXml(accent)}" opacity="0.18" />
     <text x="${target.width - 80}" y="${target.height - 96}" text-anchor="end" font-family="Arial Black, Arial" font-size="154" font-weight="900" fill="${escapeXml(text)}" opacity="0.05">${String(scene.index).padStart(2, "0")}</text>
+  `;
+}
+
+function renderArtDirectionLayer(input: RenderSceneSetInput & { scene: Scene }): string {
+  const keywords = input.sceneSet.brandKit.imagery.keywords.map((keyword) => keyword.toLowerCase());
+  if (keywords.some((keyword) => ["books", "maps", "routes"].includes(keyword))) return renderTravelEditorialLayer(input);
+  if (keywords.some((keyword) => ["coins", "proof"].includes(keyword))) return renderFinanceTrustLayer(input);
+  if (keywords.some((keyword) => ["rings", "trophy", "energy"].includes(keyword))) return renderFitnessEnergyLayer(input);
+  return renderUtilityDepthLayer(input);
+}
+
+function renderTravelEditorialLayer(input: RenderSceneSetInput & { scene: Scene }): string {
+  const { target, scene, sceneSet } = input;
+  const palette = sceneSet.brandKit.palette;
+  const headline = scene.role === "cta" ? "START" : scene.role === "proof" ? "TRUST" : "ROUTE";
+  const pinY = target.height * (0.58 + (scene.index % 3) * 0.06);
+  const paperOpacity = scene.composition === "cropped-edge-device" ? 0.64 : 0.46;
+  const bookStack = scene.composition === "object-led" || scene.index % 2 === 1
+    ? `<g transform="translate(${target.width * 0.73}, ${target.height * 0.69}) rotate(-8)" filter="url(#softShadow)">
+        <rect x="-170" y="-74" width="340" height="148" rx="18" fill="${escapeXml(palette.primary)}" />
+        <rect x="-150" y="-54" width="300" height="108" rx="14" fill="${escapeXml(palette.surface)}" opacity="0.86" />
+        <rect x="-110" y="-142" width="300" height="148" rx="18" fill="${escapeXml(palette.accent)}" opacity="0.86" />
+        <rect x="-92" y="-122" width="264" height="108" rx="14" fill="#fff" opacity="0.48" />
+        <path d="M -10 -122 V -14" stroke="${escapeXml(palette.primary)}" stroke-width="7" opacity="0.56" />
+      </g>`
+    : "";
+
+  return `
+    <g>
+      <path d="M -80 ${target.height * 0.40} C ${target.width * 0.24} ${target.height * 0.22}, ${target.width * 0.58} ${target.height * 0.72}, ${target.width + 120} ${target.height * 0.36}" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="2" stroke-dasharray="10 20" opacity="0.18" />
+      <path d="M -90 ${target.height * 0.74} C ${target.width * 0.24} ${target.height * 0.58}, ${target.width * 0.55} ${target.height * 0.90}, ${target.width + 120} ${target.height * 0.58}" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="6" stroke-dasharray="18 24" opacity="0.26" />
+      <g transform="translate(${target.width * 0.62}, ${target.height * 0.32}) rotate(7)">
+        <rect x="-238" y="-120" width="476" height="710" rx="42" fill="#fff" opacity="${paperOpacity}" filter="url(#softShadow)" />
+        <text x="-188" y="-38" font-family="Arial" font-size="24" font-weight="900" fill="${escapeXml(palette.accent)}" letter-spacing="5" opacity="0.86">${headline} NOTES</text>
+        ${Array.from({ length: 6 }, (_, index) => `<path d="M -184 ${42 + index * 82} H 184" stroke="${escapeXml(palette.primary)}" stroke-width="3" opacity="${0.08 + index * 0.01}"/>`).join("")}
+        <path d="M -150 120 C -58 48, 48 206, 146 106" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="10" stroke-linecap="round" opacity="0.28" />
+        <circle cx="-150" cy="120" r="18" fill="${escapeXml(palette.accent)}" opacity="0.68" />
+        <circle cx="146" cy="106" r="18" fill="${escapeXml(palette.primary)}" opacity="0.42" />
+      </g>
+      <g transform="translate(${target.width * 0.16}, ${pinY})" filter="url(#softShadow)">
+        <rect x="-96" y="-42" width="192" height="84" rx="42" fill="#fff" opacity="0.74" />
+        <circle cx="-48" cy="0" r="16" fill="${escapeXml(palette.accent)}" />
+        <text x="-18" y="9" font-family="Arial" font-size="24" font-weight="900" fill="${escapeXml(palette.text)}">CITY ROUTE</text>
+      </g>
+      ${bookStack}
+    </g>
+  `;
+}
+
+function renderFinanceTrustLayer(input: RenderSceneSetInput & { scene: Scene }): string {
+  const { target, scene, sceneSet } = input;
+  const palette = sceneSet.brandKit.palette;
+  const cards = Array.from({ length: 3 }, (_, index) => `
+    <g transform="translate(${target.width * (0.58 + index * 0.06)}, ${target.height * (0.24 + index * 0.08)}) rotate(${-12 + index * 9})" filter="url(#softShadow)">
+      <rect x="-146" y="-92" width="292" height="184" rx="34" fill="#fff" opacity="${0.55 - index * 0.08}" />
+      <rect x="-104" y="-34" width="208" height="20" rx="10" fill="${escapeXml(palette.accent)}" opacity="0.42" />
+      <rect x="-104" y="16" width="144" height="20" rx="10" fill="${escapeXml(palette.primary)}" opacity="0.22" />
+    </g>`).join("");
+  return `
+    <g>
+      <circle cx="${target.width * 0.74}" cy="${target.height * 0.24}" r="300" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="28" opacity="0.09" />
+      <circle cx="${target.width * 0.74}" cy="${target.height * 0.24}" r="210" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="5" stroke-dasharray="24 26" opacity="0.18" />
+      ${cards}
+      <g transform="translate(${target.width * 0.18}, ${target.height * 0.74})" opacity="${scene.composition === "proof-poster" ? 0.95 : 0.56}">
+        <rect x="-140" y="-72" width="280" height="144" rx="36" fill="${escapeXml(palette.primary)}" filter="url(#softShadow)" />
+        <text x="0" y="-10" text-anchor="middle" font-family="Arial Black, Arial" font-size="42" fill="#fff">99%</text>
+        <text x="0" y="34" text-anchor="middle" font-family="Arial" font-size="22" font-weight="900" fill="#fff" opacity="0.76">SECURE FLOW</text>
+      </g>
+    </g>
+  `;
+}
+
+function renderFitnessEnergyLayer(input: RenderSceneSetInput & { scene: Scene }): string {
+  const { target, sceneSet } = input;
+  const palette = sceneSet.brandKit.palette;
+  return `
+    <g>
+      <path d="M -60 ${target.height * 0.55} C ${target.width * 0.30} ${target.height * 0.20}, ${target.width * 0.60} ${target.height * 0.82}, ${target.width + 80} ${target.height * 0.42}" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="28" stroke-linecap="round" opacity="0.12" />
+      <path d="M -60 ${target.height * 0.60} C ${target.width * 0.30} ${target.height * 0.25}, ${target.width * 0.60} ${target.height * 0.87}, ${target.width + 80} ${target.height * 0.47}" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity="0.28" />
+      ${[0, 1, 2].map((index) => `<circle cx="${target.width * (0.68 + index * 0.055)}" cy="${target.height * (0.22 + index * 0.08)}" r="${150 - index * 28}" fill="none" stroke="${escapeXml(index % 2 ? palette.primary : palette.accent)}" stroke-width="${14 - index * 3}" opacity="${0.18 - index * 0.035}" />`).join("")}
+      <g transform="translate(${target.width * 0.17}, ${target.height * 0.75})" filter="url(#softShadow)">
+        <rect x="-122" y="-84" width="244" height="168" rx="42" fill="#fff" opacity="0.72" />
+        ${[0, 1, 2, 3].map((index) => `<rect x="${-82 + index * 48}" y="${46 - index * 32}" width="28" height="${38 + index * 32}" rx="14" fill="${escapeXml(index % 2 ? palette.primary : palette.accent)}" opacity="0.76"/>`).join("")}
+      </g>
+    </g>
+  `;
+}
+
+function renderUtilityDepthLayer(input: RenderSceneSetInput & { scene: Scene }): string {
+  const { target, scene, sceneSet } = input;
+  const palette = sceneSet.brandKit.palette;
+  return `
+    <g>
+      <path d="M ${target.width * 0.08} ${target.height * 0.39} L ${target.width * 0.88} ${target.height * 0.24} L ${target.width * 0.78} ${target.height * 0.82} L ${target.width * 0.02} ${target.height * 0.68} Z" fill="${escapeXml(palette.accent)}" opacity="0.08" />
+      ${[0, 1, 2].map((index) => `<g transform="translate(${target.width * (0.64 + index * 0.06)}, ${target.height * (0.22 + index * 0.1)}) rotate(${-8 + index * 8})" filter="url(#softShadow)"><rect x="-112" y="-78" width="224" height="156" rx="36" fill="#fff" opacity="${0.55 - index * 0.1}"/><circle cx="-58" cy="-20" r="18" fill="${escapeXml(palette.accent)}" opacity="0.66"/><rect x="-28" y="-32" width="98" height="18" rx="9" fill="${escapeXml(palette.primary)}" opacity="0.22"/><rect x="-58" y="24" width="128" height="16" rx="8" fill="${escapeXml(palette.accent)}" opacity="0.22"/></g>`).join("")}
+      ${scene.composition === "object-led" ? `<text x="${target.width * 0.52}" y="${target.height * 0.82}" font-family="Arial Black, Arial" font-size="136" fill="${escapeXml(palette.primary)}" opacity="0.055">FLOW</text>` : ""}
+    </g>
   `;
 }
 
@@ -241,19 +339,19 @@ function renderObject(input: RenderSceneSetInput & { scene: Scene }, object: Sce
     return `<g transform="${transform}" filter="url(#softShadow)"><circle r="82" fill="${escapeXml(palette.accent)}"/><circle r="56" fill="#fff" opacity="0.24"/><text y="12" text-anchor="middle" font-family="Arial" font-size="32" font-weight="900" fill="#fff">★</text></g>`;
   }
   if (object.kind === "card") {
-    return `<g transform="${transform}" filter="url(#softShadow)"><rect x="-110" y="-70" width="220" height="140" rx="34" fill="#fff"/><rect x="-74" y="-28" width="148" height="18" rx="9" fill="${escapeXml(palette.accent)}" opacity="0.35"/><rect x="-74" y="12" width="96" height="18" rx="9" fill="${escapeXml(palette.primary)}" opacity="0.2"/></g>`;
+    return `<g transform="${transform}" filter="url(#softShadow)"><rect x="-160" y="-104" width="320" height="208" rx="44" fill="#fff"/><rect x="-110" y="-40" width="220" height="24" rx="12" fill="${escapeXml(palette.accent)}" opacity="0.35"/><rect x="-110" y="18" width="144" height="24" rx="12" fill="${escapeXml(palette.primary)}" opacity="0.2"/><circle cx="104" cy="46" r="28" fill="${escapeXml(palette.accent)}" opacity="0.26"/></g>`;
   }
   if (object.kind === "coin") {
-    return `<g transform="${transform}" filter="url(#softShadow)"><ellipse cx="0" cy="0" rx="82" ry="82" fill="${escapeXml(palette.accent)}"/><ellipse cx="-12" cy="-8" rx="48" ry="48" fill="#fff" opacity="0.26"/><text y="16" text-anchor="middle" font-family="Arial" font-size="42" font-weight="900" fill="#fff">$</text></g>`;
+    return `<g transform="${transform}" filter="url(#softShadow)"><ellipse cx="0" cy="0" rx="118" ry="118" fill="${escapeXml(palette.accent)}"/><ellipse cx="-18" cy="-14" rx="70" ry="70" fill="#fff" opacity="0.26"/><text y="24" text-anchor="middle" font-family="Arial" font-size="64" font-weight="900" fill="#fff">$</text></g>`;
   }
   if (object.kind === "trophy") {
-    return `<g transform="${transform}" filter="url(#softShadow)"><path d="M-70 -70 H70 L48 34 H-48 Z" fill="${escapeXml(palette.accent)}"/><rect x="-24" y="34" width="48" height="76" rx="18" fill="${escapeXml(palette.primary)}"/><rect x="-70" y="104" width="140" height="34" rx="17" fill="#fff" opacity="0.42"/></g>`;
+    return `<g transform="${transform}" filter="url(#softShadow)"><path d="M-108 -102 H108 L76 52 H-76 Z" fill="${escapeXml(palette.accent)}"/><rect x="-34" y="52" width="68" height="118" rx="24" fill="${escapeXml(palette.primary)}"/><rect x="-116" y="160" width="232" height="50" rx="25" fill="#fff" opacity="0.42"/></g>`;
   }
   if (object.kind === "book") {
-    return `<g transform="${transform}" filter="url(#softShadow)"><rect x="-78" y="-92" width="156" height="184" rx="22" fill="${escapeXml(palette.primary)}"/><rect x="-54" y="-66" width="108" height="132" rx="14" fill="${escapeXml(palette.surface)}" opacity="0.82"/><path d="M0 -66 V66" stroke="${escapeXml(palette.accent)}" stroke-width="5"/></g>`;
+    return `<g transform="${transform}" filter="url(#softShadow)"><rect x="-132" y="-172" width="264" height="344" rx="34" fill="${escapeXml(palette.primary)}"/><rect x="-102" y="-136" width="204" height="272" rx="24" fill="${escapeXml(palette.surface)}" opacity="0.86"/><path d="M0 -136 V136" stroke="${escapeXml(palette.accent)}" stroke-width="8"/><rect x="-72" y="-72" width="144" height="22" rx="11" fill="${escapeXml(palette.accent)}" opacity="0.28"/><rect x="-72" y="-26" width="104" height="18" rx="9" fill="${escapeXml(palette.primary)}" opacity="0.18"/></g>`;
   }
 
-  return `<g transform="${transform}" filter="url(#softShadow)"><rect x="-64" y="-64" width="128" height="128" rx="26" fill="${escapeXml(palette.accent)}"/><path d="M64 -42 L112 -68 L112 60 L64 90 Z" fill="${escapeXml(palette.primary)}" opacity="0.84"/><path d="M-64 64 H64 L112 60 L62 96 H-98 Z" fill="#fff" opacity="0.35"/><circle r="28" fill="#fff" opacity="0.36"/></g>`;
+  return `<g transform="${transform}" filter="url(#softShadow)"><rect x="-92" y="-92" width="184" height="184" rx="34" fill="${escapeXml(palette.accent)}"/><path d="M92 -60 L158 -96 L158 88 L92 128 Z" fill="${escapeXml(palette.primary)}" opacity="0.84"/><path d="M-92 92 H92 L158 88 L88 138 H-138 Z" fill="#fff" opacity="0.35"/><circle r="40" fill="#fff" opacity="0.36"/></g>`;
 }
 
 function renderCallouts(input: RenderSceneSetInput & { scene: Scene }, frames: DeviceFrame[]): string {

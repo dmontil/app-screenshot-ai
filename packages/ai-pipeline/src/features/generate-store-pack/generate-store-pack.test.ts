@@ -123,6 +123,10 @@ describe("GenerateStorePackUseCase", () => {
     expect(result.brandKit.source).toBe("category-default");
     expect(result.productUnderstanding.screenInventory.map((screen) => screen.screenshotId)).toEqual(["home", "search", "map"]);
     expect(result.premiumRecipes.map((recipe) => recipe.id)).toEqual(["travel-editorial-panorama"]);
+    expect(result.premiumCandidates).toHaveLength(5);
+    const candidateScores = result.premiumCandidates.map((candidate) => candidate.qualityReport.premium?.score ?? 0);
+    expect(result.qualityReport.premium?.score).toBe(Math.max(...candidateScores));
+    expect(result.sceneSet?.id).toContain("director-cut");
     expect(result.sceneSet).toBeDefined();
     expect(result.sceneSet).toMatchObject({
       recipeId: "travel-editorial-panorama",
@@ -130,14 +134,14 @@ describe("GenerateStorePackUseCase", () => {
     });
     expect(result.sceneSet!.scenes.map((scene) => scene.composition)).toEqual([
       "hero-poster",
+      "panoramic-sequence",
       "split-devices",
-      "proof-poster",
       "cropped-edge-device",
       "object-led",
     ]);
     expect(result.storyboard.screens).toHaveLength(5);
     expect(result.storyboard.screens[1]).toMatchObject({
-      treatment: "premium-proof-card",
+      treatment: "map-route-editorial",
       sourceScreenshotPath: "input/search.png",
       secondarySourceScreenshotPath: "input/map.png",
     });

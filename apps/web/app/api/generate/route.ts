@@ -79,6 +79,7 @@ function toGenerateResponse(result: Awaited<ReturnType<LocalProjectGenerationSes
     brandKit: result.brandKit,
     productUnderstanding: result.productUnderstanding,
     premiumRecipes: result.premiumRecipes,
+    premiumCandidates: result.premiumCandidates,
     sceneSet: result.sceneSet,
     zip: {
       fileName: result.zip.fileName,

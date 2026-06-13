@@ -21,7 +21,7 @@ import {
 } from "@app-screenshot-ai/schemas";
 
 import { CheckInputReadinessUseCase } from "../input-readiness";
-import { BuildPremiumProjectContextUseCase, BuildPremiumSceneSetUseCase } from "../premium-planning";
+import { BuildPremiumCandidateSceneSetsUseCase, BuildPremiumProjectContextUseCase } from "../premium-planning";
 import { storyboardTaskContract, visualSystemTaskContract } from "./ai-task-contracts";
 
 export class GenerateStorePackError extends Error {
@@ -64,6 +64,7 @@ export type GenerateStorePackResult = {
   brandKit: BrandKit;
   productUnderstanding: ProductUnderstanding;
   premiumRecipes: PremiumRecipe[];
+  premiumCandidates: Array<{ variant: string; sceneSet: SceneSet; qualityReport: QualityReport }>;
   sceneSet?: SceneSet;
 };
 
@@ -100,13 +101,20 @@ export class GenerateStorePackUseCase {
       category: params.input.category,
       tone: premiumContext.brandKit.tone,
     }) ?? [];
-    const sceneSet = premiumRecipes[0]
-      ? new BuildPremiumSceneSetUseCase().execute({
-          brandKit: premiumContext.brandKit,
-          productUnderstanding: premiumContext.productUnderstanding,
-          recipe: premiumRecipes[0],
-        })
-      : undefined;
+    const premiumCandidates = premiumRecipes[0]
+      ? new BuildPremiumCandidateSceneSetsUseCase()
+          .execute({
+            brandKit: premiumContext.brandKit,
+            productUnderstanding: premiumContext.productUnderstanding,
+            recipe: premiumRecipes[0],
+          })
+          .map((candidate) => ({
+            variant: candidate.variant,
+            sceneSet: candidate.sceneSet,
+            qualityReport: this.evaluator.execute({ assets: [], screens: [], sceneSet: candidate.sceneSet }),
+          }))
+      : [];
+    const sceneSet = selectBestPremiumCandidate(premiumCandidates)?.sceneSet;
 
     const visualSystemContract = visualSystemTaskContract({ app: params.input, patterns });
     const visualSystemResult = await this.modelGateway.generateObject({
@@ -165,6 +173,7 @@ export class GenerateStorePackUseCase {
       brandKit: premiumContext.brandKit,
       productUnderstanding: premiumContext.productUnderstanding,
       premiumRecipes,
+      premiumCandidates,
       ...(sceneSet ? { sceneSet } : {}),
     };
   }
@@ -209,4 +218,22 @@ function treatmentForComposition(composition: SceneSet["scenes"][number]["compos
   if (composition === "panoramic-sequence") return "map-route-editorial";
   if (composition === "cropped-edge-device" || composition === "before-after") return "callout-zoom";
   return "hero-device";
+}
+
+function selectBestPremiumCandidate(
+  candidates: Array<{ variant: string; sceneSet: SceneSet; qualityReport: QualityReport }>,
+): { variant: string; sceneSet: SceneSet; qualityReport: QualityReport } | undefined {
+  return [...candidates].sort((a, b) => {
+    const scoreDelta = (b.qualityReport.premium?.score ?? 0) - (a.qualityReport.premium?.score ?? 0);
+    if (scoreDelta !== 0) return scoreDelta;
+    return variantPriority(b.variant) - variantPriority(a.variant);
+  })[0];
+}
+
+function variantPriority(variant: string): number {
+  if (variant === "director-cut") return 5;
+  if (variant === "object-rich") return 4;
+  if (variant === "split-heavy") return 3;
+  if (variant === "dark-premium") return 2;
+  return 1;
 }

@@ -77,7 +77,26 @@ function selectScreens(product: ProductUnderstanding, role: SceneSet["scenes"][n
 }
 
 function headlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][number]["role"]): string {
+  const category = product.category.toLowerCase();
   if (role === "hook") return product.valueProposition;
+  if (category === "travel") {
+    if (role === "proof") return "Routes readers can trust";
+    if (role === "comparison") return "Compare places, pages, stops";
+    if (role === "cta") return "Start your next literary walk";
+    return "Map every literary stop";
+  }
+  if (category === "finance") {
+    if (role === "proof") return "Security users can see";
+    if (role === "comparison") return "Compare money moves instantly";
+    if (role === "cta") return "Move forward with confidence";
+    return "Make every decision clearer";
+  }
+  if (category === "fitness") {
+    if (role === "proof") return "Progress you can prove";
+    if (role === "comparison") return "Compare every training phase";
+    if (role === "cta") return "Start stronger today";
+    return "Turn effort into momentum";
+  }
   if (role === "proof") return "Proof users can trust";
   if (role === "comparison") return "See the difference instantly";
   if (role === "cta") return "Start with confidence";
@@ -85,7 +104,26 @@ function headlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][num
 }
 
 function subheadlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][number]["role"]): string {
+  const category = product.category.toLowerCase();
   if (role === "hook") return `Built for ${product.audience}.`;
+  if (category === "travel") {
+    if (role === "proof") return "Turn destinations, books, and routes into one clear journey.";
+    if (role === "comparison") return "Show discovery and navigation in one premium frame.";
+    if (role === "cta") return "End with a concrete next walk, not a generic CTA.";
+    return "Make the route, map, and book context legible at a glance.";
+  }
+  if (category === "finance") {
+    if (role === "proof") return "Use visual trust signals before asking users to act.";
+    if (role === "comparison") return "Show before-and-after clarity without crowding the screen.";
+    if (role === "cta") return "Close with confidence, control, and next-step clarity.";
+    return "Explain the core money workflow in one clean composition.";
+  }
+  if (category === "fitness") {
+    if (role === "proof") return "Make consistency, streaks, and progress feel tangible.";
+    if (role === "comparison") return "Contrast plan, workout, and progress without losing energy.";
+    if (role === "cta") return "Close the set with action and momentum.";
+    return "Make the highest-energy workflow impossible to miss.";
+  }
   if (role === "proof") return "Turn product credibility into a visual asset.";
   if (role === "comparison") return "Show two app moments in one premium frame.";
   if (role === "cta") return "End the set with one clear next step.";

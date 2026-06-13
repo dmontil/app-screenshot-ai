@@ -51,6 +51,7 @@ async function main() {
   if (result.brandKit) await writeJson(args.outputDir, "brand-kit.json", result.brandKit);
   if (result.productUnderstanding) await writeJson(args.outputDir, "product-understanding.json", result.productUnderstanding);
   if (result.premiumRecipes) await writeJson(args.outputDir, "premium-recipes.json", result.premiumRecipes);
+  if (result.premiumCandidates) await writeJson(args.outputDir, "premium-candidates.json", result.premiumCandidates);
   if (result.sceneSet) await writeJson(args.outputDir, "scene-set.json", result.sceneSet);
 
   for (const asset of result.screenshots) {

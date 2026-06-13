@@ -54,6 +54,7 @@ export type GenerateResponse = {
   brandKit?: unknown;
   productUnderstanding?: unknown;
   premiumRecipes?: unknown;
+  premiumCandidates?: unknown;
   sceneSet?: unknown;
   zip: { fileName: string; dataUrl: string };
   localProjectPath: string;
