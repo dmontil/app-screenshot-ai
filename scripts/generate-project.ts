@@ -4,7 +4,7 @@ import path from "node:path";
 import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-session";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { createModelGatewayFromEnv } from "@app-screenshot-ai/model-gateway";
-import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import { createDefaultPremiumRecipeLibrary, PatternLibrary } from "@app-screenshot-ai/pattern-library";
 import { AppInputSchema } from "@app-screenshot-ai/schemas";
 
 const root = process.cwd();
@@ -23,6 +23,7 @@ async function main() {
     store: new LocalProjectStore({ rootDir: path.join(root, ".local", "projects") }),
     modelGateway: gateway,
     patternLibrary: createDefaultPatternLibrary(),
+    premiumRecipeLibrary: createDefaultPremiumRecipeLibrary(),
     sourceScreenshotLoader: {
       async load(sourcePath) {
         const absolutePath = path.isAbsolute(sourcePath) ? sourcePath : path.join(root, sourcePath);
@@ -47,6 +48,10 @@ async function main() {
   await writeJson(args.outputDir, "storyboard.json", result.storyboard);
   await writeJson(args.outputDir, "quality-report.json", result.qualityReport);
   await writeJson(args.outputDir, "export-manifest.json", result.exportManifest);
+  if (result.brandKit) await writeJson(args.outputDir, "brand-kit.json", result.brandKit);
+  if (result.productUnderstanding) await writeJson(args.outputDir, "product-understanding.json", result.productUnderstanding);
+  if (result.premiumRecipes) await writeJson(args.outputDir, "premium-recipes.json", result.premiumRecipes);
+  if (result.sceneSet) await writeJson(args.outputDir, "scene-set.json", result.sceneSet);
 
   for (const asset of result.screenshots) {
     await writeFile(path.join(args.outputDir, "screenshots", asset.fileName), asset.bytes);

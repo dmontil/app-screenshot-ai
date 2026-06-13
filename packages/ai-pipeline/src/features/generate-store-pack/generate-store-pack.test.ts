@@ -2,7 +2,8 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
 import { ModelGateway } from "@app-screenshot-ai/model-gateway";
-import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import { PatternLibrary, PremiumRecipeLibrary } from "@app-screenshot-ai/pattern-library";
+import type { PremiumRecipe } from "@app-screenshot-ai/schemas";
 
 import { GenerateStorePackUseCase } from "./generate-store-pack";
 
@@ -30,6 +31,22 @@ const visualSystem = {
 const storyboard = {
   screens: [
     { id: "hook", index: 1, role: "hook", headline: "Turn books into routes", sourceScreenshotPath: "input/home.png" },
+  ],
+};
+
+const premiumRecipe: PremiumRecipe = {
+  id: "travel-editorial-panorama",
+  category: "travel",
+  name: "Editorial route panorama",
+  qualityTarget: "top-1-percent" as const,
+  tone: ["editorial", "premium"],
+  setRhythm: ["hook", "feature", "proof", "comparison", "cta"],
+  scenes: [
+    { composition: "hero-poster" as const, requiredAssets: ["3d-object" as const], deviceSlots: 1, copyStyle: "big-loud" as const },
+    { composition: "split-devices" as const, requiredAssets: ["3d-object" as const], deviceSlots: 2, copyStyle: "minimal-premium" as const },
+    { composition: "proof-poster" as const, requiredAssets: ["badge" as const], deviceSlots: 1, copyStyle: "proof-heavy" as const },
+    { composition: "cropped-edge-device" as const, requiredAssets: ["3d-object" as const], deviceSlots: 1, copyStyle: "big-loud" as const },
+    { composition: "object-led" as const, requiredAssets: ["3d-object" as const], deviceSlots: 1, copyStyle: "minimal-premium" as const },
   ],
 };
 
@@ -75,6 +92,56 @@ describe("GenerateStorePackUseCase", () => {
     expect(result.qualityReport.passed).toBe(true);
     expect(result.exportManifest.items[0]?.path).toBe("app-store/iphone-6.9/en-US/01-hook.png");
     expect(result.zipBytes.byteLength).toBeGreaterThan(0);
+  }, 10_000);
+
+  it("builds premium project context and a SceneSet candidate alongside the rendered pack", async () => {
+    const modelGateway = new ModelGateway({
+      providers: {
+        fake: {
+          async generateObject({ task }) {
+            if (task === "visual-system.generate") return visualSystem;
+            if (task === "storyboard.generate") return storyboard;
+            throw new Error(`Unexpected task: ${task}`);
+          },
+        },
+      },
+    });
+
+    const useCase = new GenerateStorePackUseCase({
+      modelGateway,
+      patternLibrary: new PatternLibrary([]),
+      premiumRecipeLibrary: new PremiumRecipeLibrary([premiumRecipe]),
+    });
+
+    const result = await useCase.execute({
+      input: appInput,
+      provider: "fake",
+      model: "fake-fast",
+      target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+    });
+
+    expect(result.brandKit.source).toBe("category-default");
+    expect(result.productUnderstanding.screenInventory.map((screen) => screen.screenshotId)).toEqual(["home", "search", "map"]);
+    expect(result.premiumRecipes.map((recipe) => recipe.id)).toEqual(["travel-editorial-panorama"]);
+    expect(result.sceneSet).toBeDefined();
+    expect(result.sceneSet).toMatchObject({
+      recipeId: "travel-editorial-panorama",
+      continuity: { sharedBackground: "panorama", deviceTreatment: "progressive" },
+    });
+    expect(result.sceneSet!.scenes.map((scene) => scene.composition)).toEqual([
+      "hero-poster",
+      "split-devices",
+      "proof-poster",
+      "cropped-edge-device",
+      "object-led",
+    ]);
+    expect(result.storyboard.screens).toHaveLength(5);
+    expect(result.storyboard.screens[1]).toMatchObject({
+      treatment: "premium-proof-card",
+      sourceScreenshotPath: "input/search.png",
+      secondarySourceScreenshotPath: "input/map.png",
+    });
+    expect(result.qualityReport.premium?.score).toBeGreaterThan(0.8);
   }, 10_000);
 
   it("loads source screenshots for every storyboard screen before rendering", async () => {

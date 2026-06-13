@@ -5,3 +5,5 @@ node_modules
 .env
 .env.local
 examples/**/output
+docs/e2e-results/
+docs/appshot-research/appshot-gallery.png

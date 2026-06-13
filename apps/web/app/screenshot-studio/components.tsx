@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import type { EditableStoryboard, GenerateResponse, ProjectSummary, TextLayerOverride } from "./types";
 
 const categories = ["travel", "productivity", "fitness", "finance", "education", "utility", "social"];
@@ -19,6 +21,7 @@ type ProjectSwitcherProps = {
   projects: ProjectSummary[];
   selectedProjectId: string;
   selectedGenerationId: string;
+  loadingGeneration: boolean;
   onProjectChange: (value: string) => void;
   onGenerationChange: (value: string) => void;
   onLoad: () => void;
@@ -37,12 +40,17 @@ type CreationStepperProps = ProviderSettingsProps & {
 type PreviewGalleryProps = {
   result: GenerateResponse | null;
   storyboard: EditableStoryboard | null;
+  loading: boolean;
 };
 
 type ManualCopyEditorProps = {
   storyboard: EditableStoryboard | null;
   rerendering: boolean;
   autoRerender: boolean;
+  activeLocale: string;
+  translationStatus: string;
+  onActiveLocaleChange: (value: string) => void;
+  onTranslateCopy: () => void;
   onAutoRerenderChange: (value: boolean) => void;
   onUpdateScreenText: (index: number, field: "headline" | "subheadline", value: string) => void;
   onUpdateCalloutLabel: (screenIndex: number, calloutIndex: number, value: string) => void;
@@ -116,7 +124,7 @@ export function ProjectSwitcher(props: ProjectSwitcherProps) {
         </Field>
       </div>
       <div className="actions">
-        <button type="button" className="button primary" disabled={!props.selectedProjectId || !props.selectedGenerationId} onClick={props.onLoad}>Load for editing</button>
+        <button type="button" className="button primary" disabled={!props.selectedProjectId || !props.selectedGenerationId || props.loadingGeneration} onClick={props.onLoad}>{props.loadingGeneration ? "Loading generation..." : "Load for editing"}</button>
         <button type="button" className="button secondary" onClick={props.onRefresh}>Refresh projects</button>
       </div>
     </section>
@@ -223,33 +231,57 @@ export function ProviderSettings(props: ProviderSettingsProps) {
   );
 }
 
-export function PreviewGallery({ result, storyboard }: PreviewGalleryProps) {
+export function PreviewGallery({ result, storyboard, loading }: PreviewGalleryProps) {
+  const [selectedPreviewIndex, setSelectedPreviewIndex] = useState<number | null>(null);
   const screensByIndex = new Map(storyboard?.screens.map((screen) => [screen.index, screen]));
+  const selectedPreview = selectedPreviewIndex !== null ? result?.screenshots[selectedPreviewIndex] : undefined;
+  const selectedScreen = selectedPreviewIndex !== null ? screensByIndex.get(selectedPreviewIndex + 1) : undefined;
 
   return (
-    <section className="panel">
+    <section className="panel" id="preview">
       <SectionHeader eyebrow="Preview" title="Generated store set" description="Review the rendered PNGs before fine-tuning the copy." />
       {!result ? (
         <div className="empty-preview">
-          <div className="preview-row skeleton">
-            {Array.from({ length: 5 }).map((_, index) => <div className="skeleton-shot" key={index} />)}
+          <div className={`preview-row skeleton ${loading ? "is-generating" : ""}`}>
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div className="skeleton-shot" key={index}>
+                <span className="shader-orb one" />
+                <span className="shader-orb two" />
+                <span className="shader-phone" />
+                <span className="shader-line" />
+              </div>
+            ))}
           </div>
-          <p>Generated screenshots will appear here after the first run.</p>
+          <p>{loading ? "Composing backgrounds, devices, copy, and export assets…" : "Generated screenshots will appear here after the first run."}</p>
         </div>
       ) : (
         <div className="preview-grid">
           {result.screenshots.map((screenshot, index) => {
             const screen = screensByIndex.get(index + 1);
             return (
-              <figure className="preview-card" key={screenshot.fileName}>
+              <button type="button" className="preview-card" key={screenshot.fileName} onClick={() => setSelectedPreviewIndex(index)}>
                 <img src={screenshot.dataUrl} alt={`Generated screenshot ${index + 1}: ${screen?.headline ?? screenshot.fileName}`} />
-                <figcaption>
+                <span className="preview-caption">
                   <b>{String(index + 1).padStart(2, "0")} · {screen?.role ?? "store screen"}</b>
                   <span>{screen?.headline ?? screenshot.fileName}</span>
-                </figcaption>
-              </figure>
+                </span>
+              </button>
             );
           })}
+        </div>
+      )}
+      {selectedPreview && (
+        <div className="preview-modal" role="dialog" aria-modal="true" aria-label="Large screenshot preview" onClick={() => setSelectedPreviewIndex(null)}>
+          <div className="preview-modal-content" onClick={(event) => event.stopPropagation()}>
+            <div className="preview-modal-header">
+              <div>
+                <b>{selectedScreen?.headline ?? selectedPreview.fileName}</b>
+                <small>{selectedPreview.fileName}</small>
+              </div>
+              <button type="button" className="button secondary" onClick={() => setSelectedPreviewIndex(null)}>Close</button>
+            </div>
+            <img src={selectedPreview.dataUrl} alt={`Large preview: ${selectedScreen?.headline ?? selectedPreview.fileName}`} />
+          </div>
         </div>
       )}
     </section>
@@ -262,6 +294,23 @@ export function ManualCopyEditor(props: ManualCopyEditorProps) {
   return (
     <section className="panel editor-panel">
       <SectionHeader eyebrow="Editor" title="Fine-tune copy and layout" description="Edit the AI draft without calling the model again. Auto-preview rerenders PNGs locally after a short delay." />
+      <div className="translation-panel">
+        <div>
+          <b>Write another locale</b>
+          <small>Choose a target language, then use Translate copy as the starting point for localized screenshots.</small>
+        </div>
+        <select value={props.activeLocale} onChange={(event) => props.onActiveLocaleChange(event.target.value)} aria-label="Target translation language">
+          <option value="en-US">English — US</option>
+          <option value="es-ES">Español — España</option>
+          <option value="es-MX">Español — México</option>
+          <option value="fr-FR">Français</option>
+          <option value="de-DE">Deutsch</option>
+          <option value="it-IT">Italiano</option>
+          <option value="pt-BR">Português — Brasil</option>
+        </select>
+        <button type="button" className="button primary translate-cta" onClick={props.onTranslateCopy}>Translate copy</button>
+        {props.translationStatus && <small className="translation-status">{props.translationStatus}</small>}
+      </div>
       <div className="editor-layout">
         <div className="storyboard-list">
           {props.storyboard.screens.map((screen) => (
@@ -281,8 +330,8 @@ export function ManualCopyEditor(props: ManualCopyEditorProps) {
       </div>
       <div className="actions">
         <button type="button" className="button primary" disabled={props.rerendering || !props.storyboard} onClick={props.onSaveVersion}>{props.rerendering ? "Updating preview..." : "Save version"}</button>
-        <label className="inline-toggle"><input type="checkbox" checked={props.autoRerender} onChange={(event) => props.onAutoRerenderChange(event.target.checked)} /> Auto preview after edits</label>
-        <small>Save version adds this rerender to A/B history.</small>
+        <label className="inline-toggle"><input type="checkbox" checked={props.autoRerender} onChange={(event) => props.onAutoRerenderChange(event.target.checked)} /> Fast auto preview</label>
+        <small>Preview now starts about 300ms after you stop typing. Save version adds this rerender to A/B history.</small>
       </div>
     </section>
   );
@@ -343,6 +392,7 @@ export function AdvancedInspector({ result, storyboard }: { result: GenerateResp
             <InspectorBlock title="Local project" value={{ path: result.localProjectPath, provider: result.provider, model: result.model, generationId: result.generationId }} />
             <InspectorBlock title="Quality report" value={result.qualityReport} />
             <InspectorBlock title="VisualSystem + Storyboard" value={{ visualSystem: result.visualSystem, storyboard: storyboard ?? result.storyboard }} />
+            <InspectorBlock title="Premium planning" value={{ brandKit: result.brandKit, productUnderstanding: result.productUnderstanding, premiumRecipes: result.premiumRecipes, sceneSet: result.sceneSet }} />
             <InspectorBlock title="Export manifest" value={result.exportManifest} />
           </div>
         )}

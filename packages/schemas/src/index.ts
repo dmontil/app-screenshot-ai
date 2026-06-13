@@ -80,6 +80,146 @@ export const CreativeDirectionsSchema = z.object({
 });
 export type CreativeDirections = z.infer<typeof CreativeDirectionsSchema>;
 
+export const BrandKitSourceSchema = z.enum(["manual", "landing", "screenshots", "mixed", "category-default"]);
+export type BrandKitSource = z.infer<typeof BrandKitSourceSchema>;
+
+export const BrandKitSchema = z.object({
+  source: BrandKitSourceSchema,
+  palette: z.object({
+    background: z.string().min(1),
+    surface: z.string().min(1),
+    text: z.string().min(1),
+    primary: z.string().min(1),
+    accent: z.string().min(1),
+    secondary: z.string().min(1).optional(),
+  }),
+  typography: z.object({
+    displayFamily: z.string().min(1).optional(),
+    uiFamily: z.string().min(1).optional(),
+    weight: z.number().int().positive(),
+    mood: z.enum(["serif-editorial", "modern-saas", "bold-sport", "friendly"]),
+  }),
+  imagery: z.object({
+    style: z.enum(["none", "3d", "photo", "illustration", "avatar", "abstract"]),
+    keywords: z.array(z.string().min(1)),
+  }),
+  tone: z.array(z.string().min(1)),
+});
+export type BrandKit = z.infer<typeof BrandKitSchema>;
+
+export const ScreenshotAnalysisSchema = z.object({
+  screenshotId: z.string().min(1),
+  sourcePath: z.string().min(1),
+  role: z.enum(["home", "search", "detail", "map", "profile", "checkout", "unknown"]),
+  dominantColors: z.array(z.string().min(1)),
+  visualDensity: z.enum(["low", "medium", "high"]),
+  bestFor: z.array(z.enum(["hook", "feature", "proof", "comparison", "cta"])),
+});
+export type ScreenshotAnalysis = z.infer<typeof ScreenshotAnalysisSchema>;
+
+export const ProductUnderstandingSchema = z.object({
+  appName: z.string().min(1),
+  category: z.string().min(1),
+  valueProposition: z.string().min(1),
+  audience: z.string().min(1),
+  screenInventory: z.array(ScreenshotAnalysisSchema),
+});
+export type ProductUnderstanding = z.infer<typeof ProductUnderstandingSchema>;
+
+export const PremiumCompositionSchema = z.enum([
+  "hero-poster",
+  "split-devices",
+  "cropped-edge-device",
+  "proof-poster",
+  "object-led",
+  "before-after",
+  "panoramic-sequence",
+]);
+export type PremiumComposition = z.infer<typeof PremiumCompositionSchema>;
+
+export const PremiumRecipeSchema = z.object({
+  id: z.string().min(1),
+  category: z.string().min(1),
+  name: z.string().min(1),
+  qualityTarget: z.enum(["premium", "top-1-percent"]),
+  tone: z.array(z.string().min(1)),
+  setRhythm: z.tuple([
+    z.enum(["hook", "feature", "proof", "comparison", "cta"]),
+    z.enum(["hook", "feature", "proof", "comparison", "cta"]),
+    z.enum(["hook", "feature", "proof", "comparison", "cta"]),
+    z.enum(["hook", "feature", "proof", "comparison", "cta"]),
+    z.enum(["hook", "feature", "proof", "comparison", "cta"]),
+  ]),
+  scenes: z.array(z.object({
+    composition: PremiumCompositionSchema,
+    requiredAssets: z.array(z.enum(["3d-object", "badge", "gradient", "photo", "avatar", "none"])),
+    deviceSlots: z.number().int().positive(),
+    copyStyle: z.enum(["big-loud", "minimal-premium", "proof-heavy"]),
+  })).min(1),
+});
+export type PremiumRecipe = z.infer<typeof PremiumRecipeSchema>;
+
+export const SceneDeviceSchema = z.object({
+  screenshotId: z.string().min(1),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  scale: z.number().positive(),
+  tilt: z.number(),
+  crop: z.enum(["full", "top", "bottom", "edge-left", "edge-right"]),
+  depth: z.number().int().nonnegative(),
+});
+export type SceneDevice = z.infer<typeof SceneDeviceSchema>;
+
+export const SceneObjectSchema = z.object({
+  assetId: z.string().min(1),
+  kind: z.enum(["3d-cube", "badge", "coin", "trophy", "avatar", "card", "orb", "book", "map-pin"]),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  scale: z.number().positive(),
+  rotation: z.number(),
+  depth: z.number().int().nonnegative(),
+});
+export type SceneObject = z.infer<typeof SceneObjectSchema>;
+
+export const SceneSchema = z.object({
+  id: z.string().min(1),
+  index: z.number().int().positive(),
+  role: z.enum(["hook", "feature", "proof", "comparison", "cta"]),
+  composition: PremiumCompositionSchema,
+  copy: z.object({
+    headline: z.string().min(1),
+    subheadline: z.string().min(1).optional(),
+    badge: z.string().min(1).optional(),
+  }),
+  background: z.object({
+    kind: z.enum(["gradient", "mesh", "photo", "panorama", "dark-stage", "solid"]),
+    paletteRole: z.string().min(1),
+    intensity: z.number().min(0).max(1),
+  }),
+  devices: z.array(SceneDeviceSchema),
+  objects: z.array(SceneObjectSchema),
+  callouts: z.array(z.object({
+    label: z.string().min(1),
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    anchorDevice: z.number().int().nonnegative().optional(),
+  })),
+});
+export type Scene = z.infer<typeof SceneSchema>;
+
+export const SceneSetSchema = z.object({
+  id: z.string().min(1),
+  brandKit: BrandKitSchema,
+  recipeId: z.string().min(1),
+  continuity: z.object({
+    sharedBackground: z.enum(["gradient", "panorama", "photo-blur", "solid"]),
+    recurringObjects: z.array(z.string().min(1)),
+    deviceTreatment: z.enum(["consistent", "progressive"]),
+  }),
+  scenes: z.array(SceneSchema).min(1),
+});
+export type SceneSet = z.infer<typeof SceneSetSchema>;
+
 export const LayoutFamilySchema = z.enum([
   "classic-device",
   "map-route-editorial",
@@ -204,6 +344,9 @@ export const QualityIssueSchema = z.object({
 });
 export type QualityIssue = z.infer<typeof QualityIssueSchema>;
 
+export const PremiumQualityRatingSchema = z.enum(["needs-iteration", "marketable", "premium-candidate", "top-1-percent-candidate"]);
+export type PremiumQualityRating = z.infer<typeof PremiumQualityRatingSchema>;
+
 export const QualityReportSchema = z.object({
   passed: z.boolean(),
   scores: z.object({
@@ -211,6 +354,14 @@ export const QualityReportSchema = z.object({
     textQuality: z.number().min(0).max(1),
     campaignConsistency: z.number().min(0).max(1),
   }),
+  premium: z.object({
+    score: z.number().min(0).max(1),
+    rating: PremiumQualityRatingSchema,
+    compositionDiversity: z.number().min(0).max(1),
+    objectDepth: z.number().min(0).max(1),
+    deviceRichness: z.number().min(0).max(1),
+    continuity: z.number().min(0).max(1),
+  }).optional(),
   issues: z.array(QualityIssueSchema),
 });
 export type QualityReport = z.infer<typeof QualityReportSchema>;

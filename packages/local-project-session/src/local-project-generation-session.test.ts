@@ -5,7 +5,7 @@ import path from "node:path";
 import { GenerateStorePackError } from "@app-screenshot-ai/ai-pipeline";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { ModelGateway, type ModelProviderPort } from "@app-screenshot-ai/model-gateway";
-import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import { PatternLibrary, PremiumRecipeLibrary } from "@app-screenshot-ai/pattern-library";
 import type { AppInput, Storyboard, VisualSystem } from "@app-screenshot-ai/schemas";
 import { describe, expect, it } from "vitest";
 
@@ -52,6 +52,26 @@ function fakeGateway(provider?: ModelProviderPort) {
       },
     },
   });
+}
+
+function premiumRecipeLibrary() {
+  return new PremiumRecipeLibrary([
+    {
+      id: "travel-editorial-panorama",
+      category: "travel",
+      name: "Editorial route panorama",
+      qualityTarget: "top-1-percent",
+      tone: ["editorial", "premium"],
+      setRhythm: ["hook", "feature", "proof", "comparison", "cta"],
+      scenes: [
+        { composition: "hero-poster", requiredAssets: ["3d-object"], deviceSlots: 1, copyStyle: "big-loud" },
+        { composition: "split-devices", requiredAssets: ["3d-object"], deviceSlots: 2, copyStyle: "minimal-premium" },
+        { composition: "proof-poster", requiredAssets: ["badge"], deviceSlots: 1, copyStyle: "proof-heavy" },
+        { composition: "cropped-edge-device", requiredAssets: ["3d-object"], deviceSlots: 1, copyStyle: "big-loud" },
+        { composition: "object-led", requiredAssets: ["3d-object"], deviceSlots: 1, copyStyle: "minimal-premium" },
+      ],
+    },
+  ]);
 }
 
 function patternLibrary() {
@@ -181,6 +201,7 @@ describe("LocalProjectGenerationSession", () => {
         store: new LocalProjectStore({ rootDir }),
         modelGateway: fakeGateway(),
         patternLibrary: patternLibrary(),
+        premiumRecipeLibrary: premiumRecipeLibrary(),
       });
 
       const result = await session.generateStorePack({
@@ -200,21 +221,26 @@ describe("LocalProjectGenerationSession", () => {
         zip: { fileName: "literarytrip-store-pack.zip" },
       });
       expect(result.generationId).toMatch(/^gen-/);
-      expect(result.screenshots).toHaveLength(1);
+      expect(result.screenshots).toHaveLength(5);
       expect(result.qualityReport.passed).toBe(true);
       expect(result.visualSystem.id).toBe("warm-editorial-v1");
-      expect(result.storyboard.screens[0]?.headline).toBe("Turn books into routes");
+      expect(result.storyboard.screens[0]?.headline).toBe("turn books into walkable routes");
+      expect(result.brandKit!.source).toBe("category-default");
+      expect(result.premiumRecipes!.map((recipe) => recipe.id)).toEqual(["travel-editorial-panorama"]);
+      expect(result.sceneSet?.scenes.map((scene) => scene.composition)).toContain("split-devices");
       expect(result.exportManifest.items[0]?.path).toBe("app-store/iphone-6.9/en-US/01-hook.png");
       expect(result.zip.bytes.byteLength).toBeGreaterThan(0);
 
       const generation = await new LocalProjectStore({ rootDir }).readGeneration("literarytrip", result.generationId!);
       expect(generation.label).toBe("AI generation");
-      expect(generation.storyboard.screens[0]?.headline).toBe("Turn books into routes");
+      expect(generation.storyboard.screens[0]?.headline).toBe("turn books into walkable routes");
       expect(generation.renders[0]?.fileName).toBe("01-hook.png");
       expect(generation.zip.fileName).toBe("literarytrip-store-pack.zip");
 
       const readiness = JSON.parse(await readFile(path.join(rootDir, "literarytrip", "pipeline", "input-readiness.json"), "utf8"));
       expect(readiness.canGenerate).toBe(true);
+      const sceneSet = JSON.parse(await readFile(path.join(rootDir, "literarytrip", "pipeline", "scene-set.json"), "utf8"));
+      expect(sceneSet.recipeId).toBe("travel-editorial-panorama");
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

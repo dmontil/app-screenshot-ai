@@ -1,7 +1,7 @@
 import { EvaluateStoreSetUseCase } from "@app-screenshot-ai/evaluator";
 import { ExportStorePackUseCase } from "@app-screenshot-ai/export-engine";
 import type { ModelGateway } from "@app-screenshot-ai/model-gateway";
-import type { PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import type { PatternLibrary, PremiumRecipeLibrary } from "@app-screenshot-ai/pattern-library";
 import { RenderStoreSetUseCase } from "@app-screenshot-ai/render-engine";
 import {
   type AppInput,
@@ -13,9 +13,15 @@ import {
   type RenderTarget,
   type Storyboard,
   type VisualSystem,
+  type BrandKit,
+  type ProductUnderstanding,
+  type PremiumRecipe,
+  type SceneSet,
+  StoryboardSchema,
 } from "@app-screenshot-ai/schemas";
 
 import { CheckInputReadinessUseCase } from "../input-readiness";
+import { BuildPremiumProjectContextUseCase, BuildPremiumSceneSetUseCase } from "../premium-planning";
 import { storyboardTaskContract, visualSystemTaskContract } from "./ai-task-contracts";
 
 export class GenerateStorePackError extends Error {
@@ -55,11 +61,16 @@ export type GenerateStorePackResult = {
   qualityReport: QualityReport;
   exportManifest: ExportManifest;
   zipBytes: Uint8Array;
+  brandKit: BrandKit;
+  productUnderstanding: ProductUnderstanding;
+  premiumRecipes: PremiumRecipe[];
+  sceneSet?: SceneSet;
 };
 
 export class GenerateStorePackUseCase {
   private readonly modelGateway: ModelGateway;
   private readonly patternLibrary: PatternLibrary;
+  private readonly premiumRecipeLibrary: PremiumRecipeLibrary | undefined;
   private readonly readiness = new CheckInputReadinessUseCase();
   private readonly renderer = new RenderStoreSetUseCase();
   private readonly evaluator = new EvaluateStoreSetUseCase();
@@ -69,10 +80,12 @@ export class GenerateStorePackUseCase {
   constructor(params: {
     modelGateway: ModelGateway;
     patternLibrary: PatternLibrary;
+    premiumRecipeLibrary?: PremiumRecipeLibrary;
     sourceScreenshotLoader?: SourceScreenshotLoaderPort;
   }) {
     this.modelGateway = params.modelGateway;
     this.patternLibrary = params.patternLibrary;
+    this.premiumRecipeLibrary = params.premiumRecipeLibrary;
     this.sourceScreenshotLoader = params.sourceScreenshotLoader;
   }
 
@@ -81,6 +94,18 @@ export class GenerateStorePackUseCase {
     if (!readiness.canGenerate) throw new GenerateStorePackError(readiness);
 
     const patterns = this.patternLibrary.retrieve({ category: params.input.category, tone: [] });
+    const premiumContext = await new BuildPremiumProjectContextUseCase().execute({ input: params.input });
+    const premiumRecipes = this.premiumRecipeLibrary?.retrieve({
+      category: params.input.category,
+      tone: premiumContext.brandKit.tone,
+    }) ?? [];
+    const sceneSet = premiumRecipes[0]
+      ? new BuildPremiumSceneSetUseCase().execute({
+          brandKit: premiumContext.brandKit,
+          productUnderstanding: premiumContext.productUnderstanding,
+          recipe: premiumRecipes[0],
+        })
+      : undefined;
 
     const visualSystemContract = visualSystemTaskContract({ app: params.input, patterns });
     const visualSystemResult = await this.modelGateway.generateObject({
@@ -99,28 +124,80 @@ export class GenerateStorePackUseCase {
       schema: storyboardContract.schema,
       input: storyboardContract.input,
     });
+    const storyboard = sceneSet
+      ? compileSceneSetStoryboard(sceneSet, premiumContext.productUnderstanding)
+      : storyboardResult.object;
 
     const assets: RenderedAsset[] = await this.renderer.execute({
       visualSystem: visualSystemResult.object,
-      storyboard: storyboardResult.object,
+      storyboard,
       target: params.target,
       ...(this.sourceScreenshotLoader
         ? { loadSourceScreenshot: (sourcePath: string) => this.sourceScreenshotLoader!.load(sourcePath) }
         : {}),
     });
 
-    const qualityReport = this.evaluator.execute({ assets, screens: storyboardResult.object.screens });
+    const qualityReport = this.evaluator.execute({
+      assets,
+      screens: storyboard.screens,
+      ...(sceneSet ? { sceneSet } : {}),
+    });
     const exported = await this.exporter.execute({ assets });
 
     return {
       readiness,
       patterns,
       visualSystem: visualSystemResult.object,
-      storyboard: storyboardResult.object,
+      storyboard,
       assets,
       qualityReport,
       exportManifest: exported.manifest,
       zipBytes: exported.zipBytes,
+      brandKit: premiumContext.brandKit,
+      productUnderstanding: premiumContext.productUnderstanding,
+      premiumRecipes,
+      ...(sceneSet ? { sceneSet } : {}),
     };
   }
+}
+
+function compileSceneSetStoryboard(sceneSet: SceneSet, productUnderstanding: ProductUnderstanding): Storyboard {
+  const sourcePathsByScreenshotId = new Map(
+    productUnderstanding.screenInventory.map((screen) => [screen.screenshotId, screen.sourcePath]),
+  );
+  const fallbackPath = productUnderstanding.screenInventory[0]?.sourcePath ?? "input/screenshot.png";
+
+  return StoryboardSchema.parse({
+    screens: sceneSet.scenes.map((scene) => {
+      const primaryDevice = scene.devices[0];
+      const secondaryDevice = scene.devices[1];
+      const primaryPath = primaryDevice ? sourcePathsByScreenshotId.get(primaryDevice.screenshotId) ?? fallbackPath : fallbackPath;
+      const secondaryPath = secondaryDevice ? sourcePathsByScreenshotId.get(secondaryDevice.screenshotId) ?? fallbackPath : undefined;
+
+      return {
+        id: scene.id,
+        index: scene.index,
+        role: scene.role,
+        headline: scene.copy.headline,
+        ...(scene.copy.subheadline ? { subheadline: scene.copy.subheadline } : {}),
+        treatment: treatmentForComposition(scene.composition),
+        sourceScreenshotPath: primaryPath,
+        ...(secondaryPath ? { secondarySourceScreenshotPath: secondaryPath } : {}),
+        device: {
+          scale: primaryDevice?.scale,
+          tilt: primaryDevice?.tilt,
+          crop: primaryDevice?.crop,
+        },
+        callouts: scene.callouts,
+      };
+    }),
+  });
+}
+
+function treatmentForComposition(composition: SceneSet["scenes"][number]["composition"]): Storyboard["screens"][number]["treatment"] {
+  if (composition === "split-devices" || composition === "proof-poster") return "premium-proof-card";
+  if (composition === "object-led") return "cinematic-poster";
+  if (composition === "panoramic-sequence") return "map-route-editorial";
+  if (composition === "cropped-edge-device" || composition === "before-after") return "callout-zoom";
+  return "hero-device";
 }

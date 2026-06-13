@@ -3,7 +3,7 @@ import { EvaluateStoreSetUseCase } from "@app-screenshot-ai/evaluator";
 import { ExportStorePackUseCase } from "@app-screenshot-ai/export-engine";
 import type { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import type { ModelGateway } from "@app-screenshot-ai/model-gateway";
-import type { PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import type { PatternLibrary, PremiumRecipeLibrary } from "@app-screenshot-ai/pattern-library";
 import { RenderStoreSetUseCase } from "@app-screenshot-ai/render-engine";
 import type {
   AppInput,
@@ -14,12 +14,17 @@ import type {
   RenderTarget,
   Storyboard,
   VisualSystem,
+  BrandKit,
+  ProductUnderstanding,
+  PremiumRecipe,
+  SceneSet,
 } from "@app-screenshot-ai/schemas";
 
 export type LocalProjectGenerationSessionOptions = {
   store: LocalProjectStore;
   modelGateway: ModelGateway;
   patternLibrary: PatternLibrary;
+  premiumRecipeLibrary?: PremiumRecipeLibrary;
   sourceScreenshotLoader?: SourceScreenshotLoaderPort;
 };
 
@@ -53,18 +58,24 @@ export type LocalStorePackResult = {
   exportManifest: ExportManifest;
   zip: { fileName: string; bytes: Uint8Array };
   localProjectPath: string;
+  brandKit?: BrandKit;
+  productUnderstanding?: ProductUnderstanding;
+  premiumRecipes?: PremiumRecipe[];
+  sceneSet?: SceneSet;
 };
 
 export class LocalProjectGenerationSession {
   private readonly store: LocalProjectStore;
   private readonly modelGateway: ModelGateway;
   private readonly patternLibrary: PatternLibrary;
+  private readonly premiumRecipeLibrary: PremiumRecipeLibrary | undefined;
   private readonly sourceScreenshotLoader: SourceScreenshotLoaderPort | undefined;
 
   constructor(options: LocalProjectGenerationSessionOptions) {
     this.store = options.store;
     this.modelGateway = options.modelGateway;
     this.patternLibrary = options.patternLibrary;
+    this.premiumRecipeLibrary = options.premiumRecipeLibrary;
     this.sourceScreenshotLoader = options.sourceScreenshotLoader;
   }
 
@@ -118,6 +129,7 @@ export class LocalProjectGenerationSession {
     const useCase = new GenerateStorePackUseCase({
       modelGateway: this.modelGateway,
       patternLibrary: this.patternLibrary,
+      ...(this.premiumRecipeLibrary ? { premiumRecipeLibrary: this.premiumRecipeLibrary } : {}),
       ...(this.sourceScreenshotLoader ? { sourceScreenshotLoader: this.sourceScreenshotLoader } : {}),
     });
 
@@ -136,6 +148,10 @@ export class LocalProjectGenerationSession {
         this.store.writeArtifact({ projectId: params.projectId, name: "storyboard", value: result.storyboard }),
         this.store.writeArtifact({ projectId: params.projectId, name: "quality-report", value: result.qualityReport }),
         this.store.writeArtifact({ projectId: params.projectId, name: "export-manifest", value: result.exportManifest }),
+        this.store.writeArtifact({ projectId: params.projectId, name: "brand-kit", value: result.brandKit }),
+        this.store.writeArtifact({ projectId: params.projectId, name: "product-understanding", value: result.productUnderstanding }),
+        this.store.writeArtifact({ projectId: params.projectId, name: "premium-recipes", value: result.premiumRecipes }),
+        ...(result.sceneSet ? [this.store.writeArtifact({ projectId: params.projectId, name: "scene-set", value: result.sceneSet })] : []),
       ]);
 
       for (const asset of result.assets) {
@@ -173,6 +189,10 @@ export class LocalProjectGenerationSession {
         exportManifest: result.exportManifest,
         zip: { fileName: zipName, bytes: result.zipBytes },
         localProjectPath: project.projectDir,
+        brandKit: result.brandKit,
+        productUnderstanding: result.productUnderstanding,
+        premiumRecipes: result.premiumRecipes,
+        ...(result.sceneSet ? { sceneSet: result.sceneSet } : {}),
       };
     } catch (error) {
       if (error instanceof GenerateStorePackError) {

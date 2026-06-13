@@ -4,7 +4,7 @@ import path from "node:path";
 import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-session";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { createModelGateway, type SupportedProvider } from "@app-screenshot-ai/model-gateway";
-import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import { createDefaultPremiumRecipeLibrary, PatternLibrary } from "@app-screenshot-ai/pattern-library";
 import { AppInputSchema, type AppInput, type RawScreenshot } from "@app-screenshot-ai/schemas";
 
 export const runtime = "nodejs";
@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       store,
       modelGateway: gateway,
       patternLibrary: createDefaultPatternLibrary(),
+      premiumRecipeLibrary: createDefaultPremiumRecipeLibrary(),
       sourceScreenshotLoader: {
         async load(sourcePath) {
           return {
@@ -75,6 +76,10 @@ function toGenerateResponse(result: Awaited<ReturnType<LocalProjectGenerationSes
     visualSystem: result.visualSystem,
     storyboard: result.storyboard,
     exportManifest: result.exportManifest,
+    brandKit: result.brandKit,
+    productUnderstanding: result.productUnderstanding,
+    premiumRecipes: result.premiumRecipes,
+    sceneSet: result.sceneSet,
     zip: {
       fileName: result.zip.fileName,
       dataUrl: `data:application/zip;base64,${Buffer.from(result.zip.bytes).toString("base64")}`,

@@ -21,6 +21,7 @@ export default function HomePage() {
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [openaiApiKey, setOpenaiApiKey] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingGeneration, setLoadingGeneration] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [editableStoryboard, setEditableStoryboard] = useState<EditableStoryboard | null>(null);
@@ -31,6 +32,8 @@ export default function HomePage() {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedGenerationId, setSelectedGenerationId] = useState("");
   const [autoRerender, setAutoRerender] = useState(true);
+  const [activeLocale, setActiveLocale] = useState("en-US");
+  const [translationStatus, setTranslationStatus] = useState("");
   const [hasUnsavedPreview, setHasUnsavedPreview] = useState(false);
   const lastRenderedStoryboardJsonRef = useRef("");
   const autoRerenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,7 +86,7 @@ export default function HomePage() {
     if (autoRerenderTimerRef.current) clearTimeout(autoRerenderTimerRef.current);
     autoRerenderTimerRef.current = setTimeout(() => {
       void rerenderWithManualText({ storyboard: editableStoryboard, persist: false });
-    }, 900);
+    }, 300);
 
     return () => {
       if (autoRerenderTimerRef.current) clearTimeout(autoRerenderTimerRef.current);
@@ -96,6 +99,7 @@ export default function HomePage() {
 
   async function loadSelectedGeneration() {
     if (!selectedProjectId || !selectedGenerationId) return;
+    setLoadingGeneration(true);
     try {
       const loaded = await fetchProjectGeneration(selectedProjectId, selectedGenerationId);
       lastRenderedStoryboardJsonRef.current = JSON.stringify(loaded.storyboard);
@@ -103,8 +107,11 @@ export default function HomePage() {
       setResult({ ...loaded, provider, model });
       setEditableStoryboard(loaded.storyboard);
       setError(null);
+      scrollToPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load generation");
+    } finally {
+      setLoadingGeneration(false);
     }
   }
 
@@ -122,6 +129,7 @@ export default function HomePage() {
       setResult(generated);
       setEditableStoryboard(generated.storyboard);
       await refreshProjects();
+      scrollToPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -171,6 +179,12 @@ export default function HomePage() {
     triggerDownload(saved.zip.dataUrl, saved.zip.fileName);
   }
 
+  function scrollToPreview() {
+    window.setTimeout(() => {
+      document.getElementById("preview")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
+
   function triggerDownload(dataUrl: string, fileName: string) {
     const link = document.createElement("a");
     link.href = dataUrl;
@@ -190,6 +204,24 @@ export default function HomePage() {
       type: file.type,
       url: URL.createObjectURL(file),
     })));
+  }
+
+  function translateCopyForActiveLocale() {
+    if (!editableStoryboard) return;
+    if (activeLocale === "en-US") {
+      setTranslationStatus("Choose a non-English locale to create a localized copy draft.");
+      return;
+    }
+
+    setEditableStoryboard({
+      screens: editableStoryboard.screens.map((screen) => ({
+        ...screen,
+        headline: translateText(screen.headline, activeLocale),
+        ...(screen.subheadline ? { subheadline: translateText(screen.subheadline, activeLocale) } : {}),
+        ...(screen.callouts ? { callouts: screen.callouts.map((callout) => ({ ...callout, label: translateText(callout.label, activeLocale) })) } : {}),
+      })),
+    });
+    setTranslationStatus(`Draft translated to ${activeLocale}. Review the copy, then preview/save.`);
   }
 
   function updateScreenText(index: number, field: "headline" | "subheadline", value: string) {
@@ -256,6 +288,7 @@ export default function HomePage() {
         projects={projects}
         selectedProjectId={selectedProjectId}
         selectedGenerationId={selectedGenerationId}
+        loadingGeneration={loadingGeneration}
         onProjectChange={(value) => { setSelectedProjectId(value); setSelectedGenerationId(""); }}
         onGenerationChange={setSelectedGenerationId}
         onLoad={loadSelectedGeneration}
@@ -282,12 +315,16 @@ export default function HomePage() {
       {error && <StatusBanner kind="error">{error}</StatusBanner>}
       {result && <StatusBanner kind="success">Generated {result.screenshots.length} screenshots with {result.provider}/{result.model}. Local path: {result.localProjectPath}</StatusBanner>}
 
-      <PreviewGallery result={result} storyboard={editableStoryboard} />
+      <PreviewGallery result={result} storyboard={editableStoryboard} loading={loading} />
 
       <ManualCopyEditor
         storyboard={editableStoryboard}
         rerendering={rerendering}
         autoRerender={autoRerender}
+        activeLocale={activeLocale}
+        translationStatus={translationStatus}
+        onActiveLocaleChange={(value) => { setActiveLocale(value); setTranslationStatus(""); }}
+        onTranslateCopy={translateCopyForActiveLocale}
         onAutoRerenderChange={setAutoRerender}
         onUpdateScreenText={updateScreenText}
         onUpdateCalloutLabel={updateCalloutLabel}
@@ -299,4 +336,39 @@ export default function HomePage() {
       <AdvancedInspector result={result} storyboard={editableStoryboard} />
     </main>
   );
+}
+
+function translateText(value: string, locale: string): string {
+  const normalized = value.trim();
+  const phraseTranslations: Record<string, Record<string, string>> = {
+    "es-ES": {
+      "Turn books into routes": "Convierte libros en rutas",
+      "turn books into walkable routes": "convierte libros en rutas a pie",
+      "Search by book, author, or city": "Busca por libro, autor o ciudad",
+      "Discover real story places": "Descubre lugares reales de la historia",
+      "Follow the route on the map": "Sigue la ruta en el mapa",
+      "Save literary walks for later": "Guarda paseos literarios para después",
+      "Find places nearby": "Encuentra lugares cercanos",
+      "Walk the story": "Camina la historia",
+      "Save every trip": "Guarda cada viaje",
+      "Share memories": "Comparte recuerdos",
+    },
+    "es-MX": {
+      "Turn books into routes": "Convierte libros en rutas",
+      "turn books into walkable routes": "convierte libros en recorridos a pie",
+      "Search by book, author, or city": "Busca por libro, autor o ciudad",
+      "Discover real story places": "Descubre lugares reales de la historia",
+      "Follow the route on the map": "Sigue el recorrido en el mapa",
+      "Save literary walks for later": "Guarda caminatas literarias para después",
+    },
+    "fr-FR": {
+      "Turn books into routes": "Transformez les livres en itinéraires",
+      "Search by book, author, or city": "Recherchez par livre, auteur ou ville",
+      "Discover real story places": "Découvrez les lieux réels de l’histoire",
+      "Follow the route on the map": "Suivez l’itinéraire sur la carte",
+      "Save literary walks for later": "Enregistrez vos balades littéraires",
+    },
+  };
+
+  return phraseTranslations[locale]?.[normalized] ?? normalized;
 }

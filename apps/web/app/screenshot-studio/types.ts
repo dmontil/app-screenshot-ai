@@ -51,6 +51,10 @@ export type GenerateResponse = {
   visualSystem: unknown;
   storyboard: EditableStoryboard;
   exportManifest: unknown;
+  brandKit?: unknown;
+  productUnderstanding?: unknown;
+  premiumRecipes?: unknown;
+  sceneSet?: unknown;
   zip: { fileName: string; dataUrl: string };
   localProjectPath: string;
 };
