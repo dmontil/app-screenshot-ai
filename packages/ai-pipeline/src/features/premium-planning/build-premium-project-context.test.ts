@@ -22,8 +22,8 @@ describe("BuildPremiumProjectContextUseCase", () => {
     const result = await new BuildPremiumProjectContextUseCase().execute({ input: appInput });
 
     expect(result.brandKit.source).toBe("manual");
-    expect(result.brandKit.palette.primary).toBe("#101010");
-    expect(result.brandKit.palette.background).toBe("#FAFAFA");
+    expect(result.brandKit.palette.background).toBe("#101010");
+    expect(result.brandKit.palette.primary).toBe("#FAFAFA");
     expect(result.brandKit.palette.accent).toBe("#FF9900");
     expect(result.productUnderstanding).toMatchObject({
       appName: "LiteraryTrip",

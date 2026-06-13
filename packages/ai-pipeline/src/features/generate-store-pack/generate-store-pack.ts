@@ -2,7 +2,7 @@ import { EvaluateStoreSetUseCase } from "@app-screenshot-ai/evaluator";
 import { ExportStorePackUseCase } from "@app-screenshot-ai/export-engine";
 import type { ModelGateway } from "@app-screenshot-ai/model-gateway";
 import type { PatternLibrary, PremiumRecipeLibrary } from "@app-screenshot-ai/pattern-library";
-import { RenderStoreSetUseCase } from "@app-screenshot-ai/render-engine";
+import { RenderSceneSetUseCase, RenderStoreSetUseCase } from "@app-screenshot-ai/render-engine";
 import {
   type AppInput,
   type DesignPattern,
@@ -73,6 +73,7 @@ export class GenerateStorePackUseCase {
   private readonly premiumRecipeLibrary: PremiumRecipeLibrary | undefined;
   private readonly readiness = new CheckInputReadinessUseCase();
   private readonly renderer = new RenderStoreSetUseCase();
+  private readonly sceneRenderer = new RenderSceneSetUseCase();
   private readonly evaluator = new EvaluateStoreSetUseCase();
   private readonly exporter = new ExportStorePackUseCase();
   private readonly sourceScreenshotLoader: SourceScreenshotLoaderPort | undefined;
@@ -128,14 +129,22 @@ export class GenerateStorePackUseCase {
       ? compileSceneSetStoryboard(sceneSet, premiumContext.productUnderstanding)
       : storyboardResult.object;
 
-    const assets: RenderedAsset[] = await this.renderer.execute({
-      visualSystem: visualSystemResult.object,
-      storyboard,
-      target: params.target,
-      ...(this.sourceScreenshotLoader
-        ? { loadSourceScreenshot: (sourcePath: string) => this.sourceScreenshotLoader!.load(sourcePath) }
-        : {}),
-    });
+    const loadSourceScreenshot = this.sourceScreenshotLoader
+      ? (sourcePath: string) => this.sourceScreenshotLoader!.load(sourcePath)
+      : undefined;
+    const assets: RenderedAsset[] = sceneSet
+      ? await this.sceneRenderer.execute({
+          sceneSet,
+          productUnderstanding: premiumContext.productUnderstanding,
+          target: params.target,
+          ...(loadSourceScreenshot ? { loadSourceScreenshot } : {}),
+        })
+      : await this.renderer.execute({
+          visualSystem: visualSystemResult.object,
+          storyboard,
+          target: params.target,
+          ...(loadSourceScreenshot ? { loadSourceScreenshot } : {}),
+        });
 
     const qualityReport = this.evaluator.execute({
       assets,

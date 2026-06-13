@@ -38,8 +38,8 @@ function buildBrandKit(input: AppInput): BrandKit {
   const defaults = categoryBrandDefaults(input.category);
   const palette = manualColors.length > 0
     ? {
-        primary: manualColors[0] ?? defaults.palette.primary,
-        background: manualColors[1] ?? defaults.palette.background,
+        background: manualColors[0] ?? defaults.palette.background,
+        primary: manualColors[1] ?? defaults.palette.primary,
         accent: manualColors[2] ?? defaults.palette.accent,
         surface: defaults.palette.surface,
         text: defaults.palette.text,
