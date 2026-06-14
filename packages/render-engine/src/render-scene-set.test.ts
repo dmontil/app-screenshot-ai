@@ -87,6 +87,9 @@ describe("RenderSceneSetUseCase", () => {
     expect(utilityDiagnostics.artDirection).toBe("utility");
     expect(travelDiagnostics.artDirection).toBe("travel");
     expect(utilityDiagnostics.artDirection).not.toBe(travelDiagnostics.artDirection);
+    expect(utilityDiagnostics.effectivePalette.accent).toBe("#2563EB");
+    expect(travelDiagnostics.effectivePalette.accent).toBe("#2563EB");
+    expect(utilityDiagnostics.foregroundDecorativeObjects).toBe(0);
     expect(utilityDiagnostics.framesByScene[0]!.frames[0]!.height / target.height).toBeGreaterThanOrEqual(0.68);
     expect(utilityDiagnostics.framesByScene[2]!.frames[0]!.height / target.height).toBeGreaterThanOrEqual(0.68);
   });

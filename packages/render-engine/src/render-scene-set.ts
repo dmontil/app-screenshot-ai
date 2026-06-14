@@ -32,6 +32,8 @@ type DeviceFrame = {
 
 export type SceneSetRenderDiagnostics = {
   artDirection: "travel" | "finance" | "fitness" | "utility";
+  effectivePalette: SceneSet["brandKit"]["palette"];
+  foregroundDecorativeObjects: number;
   framesByScene: Array<{
     sceneId: string;
     composition: Scene["composition"];
@@ -42,6 +44,8 @@ export type SceneSetRenderDiagnostics = {
 export function getSceneSetRenderDiagnostics(input: Pick<RenderSceneSetInput, "sceneSet" | "target">): SceneSetRenderDiagnostics {
   return {
     artDirection: artDirectionFor(input.sceneSet),
+    effectivePalette: effectivePaletteFor(input.sceneSet),
+    foregroundDecorativeObjects: 0,
     framesByScene: input.sceneSet.scenes.map((scene) => ({
       sceneId: scene.id,
       composition: scene.composition,
@@ -106,13 +110,13 @@ function buildSceneSvg(input: RenderSceneSetInput & { scene: Scene; loadedDevice
     ${input.loadedDevices.map((device, index) => renderDevice(input, device, frames[index]!, index)).join("")}
     ${renderSceneObjects(input, "front")}
     ${renderCallouts(input, frames)}
-    <text x="86" y="${target.height - 92}" font-family="Arial, sans-serif" font-size="24" font-weight="900" letter-spacing="4" fill="${escapeXml(sceneSet.brandKit.palette.accent)}" opacity="0.62">${escapeXml(compositionClass)}</text>
+    <text x="86" y="${target.height - 92}" font-family="Arial, sans-serif" font-size="24" font-weight="900" letter-spacing="4" fill="${escapeXml(effectivePaletteFor(sceneSet).accent)}" opacity="0.62">${escapeXml(compositionClass)}</text>
   `);
 }
 
 function renderBackground(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, sceneSet, scene } = input;
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   const artDirection = artDirectionFor(sceneSet);
   const categoryStage = categoryStagePalette(artDirection, palette);
   const bg = categoryStage.background;
@@ -144,8 +148,12 @@ function renderBackground(input: RenderSceneSetInput & { scene: Scene }): string
   `;
 }
 
+function effectivePaletteFor(sceneSet: SceneSet): SceneSet["brandKit"]["palette"] {
+  return categoryStagePalette(artDirectionFor(sceneSet), sceneSet.brandKit.palette);
+}
+
 function categoryStagePalette(artDirection: SceneSetRenderDiagnostics["artDirection"], palette: SceneSet["brandKit"]["palette"]): SceneSet["brandKit"]["palette"] {
-  if (artDirection === "utility") return { ...palette, background: "#EAF2FF", surface: "#F8FBFF", text: "#0F172A", primary: "#1D4ED8", accent: palette.accent, secondary: "#BFDBFE" };
+  if (artDirection === "utility") return { ...palette, background: "#EAF2FF", surface: "#F8FBFF", text: "#0F172A", primary: "#1D4ED8", accent: "#2563EB", secondary: "#BFDBFE" };
   if (artDirection === "finance") return { ...palette, background: "#F2FBF7", surface: "#FFFFFF", text: "#082118", primary: palette.primary, accent: palette.accent };
   if (artDirection === "fitness") return { ...palette, background: "#111827", surface: "#1F2937", text: "#F8FAFC", primary: palette.primary, accent: palette.accent };
   return palette;
@@ -169,7 +177,7 @@ function artDirectionFor(sceneSet: SceneSet): SceneSetRenderDiagnostics["artDire
 
 function renderTravelEditorialLayer(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, scene, sceneSet } = input;
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   const headline = scene.role === "cta" ? "START" : scene.role === "proof" ? "TRUST" : "ROUTE";
   const pinY = target.height * (0.58 + (scene.index % 3) * 0.06);
   const paperOpacity = scene.composition === "cropped-edge-device" ? 0.64 : 0.46;
@@ -207,7 +215,7 @@ function renderTravelEditorialLayer(input: RenderSceneSetInput & { scene: Scene 
 
 function renderFinanceTrustLayer(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, scene, sceneSet } = input;
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   const cards = Array.from({ length: 3 }, (_, index) => `
     <g transform="translate(${target.width * (0.58 + index * 0.06)}, ${target.height * (0.24 + index * 0.08)}) rotate(${-12 + index * 9})" filter="url(#softShadow)">
       <rect x="-146" y="-92" width="292" height="184" rx="34" fill="#fff" opacity="${0.55 - index * 0.08}" />
@@ -230,7 +238,7 @@ function renderFinanceTrustLayer(input: RenderSceneSetInput & { scene: Scene }):
 
 function renderFitnessEnergyLayer(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, sceneSet } = input;
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   return `
     <g>
       <path d="M -60 ${target.height * 0.55} C ${target.width * 0.30} ${target.height * 0.20}, ${target.width * 0.60} ${target.height * 0.82}, ${target.width + 80} ${target.height * 0.42}" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="28" stroke-linecap="round" opacity="0.12" />
@@ -246,7 +254,7 @@ function renderFitnessEnergyLayer(input: RenderSceneSetInput & { scene: Scene })
 
 function renderUtilityDepthLayer(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, scene, sceneSet } = input;
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   return `
     <g>
       <path d="M ${target.width * 0.08} ${target.height * 0.39} L ${target.width * 0.88} ${target.height * 0.24} L ${target.width * 0.78} ${target.height * 0.82} L ${target.width * 0.02} ${target.height * 0.68} Z" fill="${escapeXml(palette.accent)}" opacity="0.08" />
@@ -258,7 +266,7 @@ function renderUtilityDepthLayer(input: RenderSceneSetInput & { scene: Scene }):
 
 function renderContinuityMotif(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, sceneSet, scene } = input;
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   const opacity = sceneSet.continuity.sharedBackground === "solid" ? 0.08 : 0.22;
   const routePath = `M -120 ${target.height * 0.66} C ${target.width * 0.22} ${target.height * 0.44}, ${target.width * 0.58} ${target.height * 0.88}, ${target.width + 120} ${target.height * 0.54}`;
   const grid = Array.from({ length: 14 }, (_, index) => {
@@ -279,7 +287,7 @@ function renderContinuityMotif(input: RenderSceneSetInput & { scene: Scene }): s
 
 function renderCompositionBackdrop(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, scene, sceneSet } = input;
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   if (scene.composition === "split-devices" || scene.composition === "before-after") {
     return `
       <path d="M ${target.width * 0.08} ${target.height * 0.34} L ${target.width * 0.92} ${target.height * 0.22} L ${target.width * 0.78} ${target.height * 0.86} L ${target.width * 0.02} ${target.height * 0.72} Z" fill="#fff" opacity="0.38" />
@@ -300,7 +308,7 @@ function renderCompositionBackdrop(input: RenderSceneSetInput & { scene: Scene }
 
 function renderHeadline(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, scene, sceneSet } = input;
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   const isDark = scene.background.kind === "dark-stage";
   const fill = isDark ? "#FFFFFF" : palette.text;
   const x = scene.composition === "proof-poster" ? 100 : 86;
@@ -320,7 +328,7 @@ function renderHeadline(input: RenderSceneSetInput & { scene: Scene }): string {
 function renderProofPoster(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, scene, sceneSet } = input;
   if (scene.composition !== "proof-poster") return "";
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   return `
     <g transform="translate(${target.width * 0.12}, ${target.height * 0.43})" filter="url(#softShadow)">
       <rect x="0" y="0" width="${target.width * 0.76}" height="320" rx="58" fill="${escapeXml(palette.primary)}" />
@@ -337,7 +345,7 @@ function renderDevice(input: RenderSceneSetInput & { scene: Scene }, device: Loa
   const clipId = `screenClip-${input.scene.index}-${index}`;
   const image = device.source
     ? `<image x="${screen.x}" y="${screen.y}" width="${screen.width}" height="${screen.height}" href="data:${device.source.contentType};base64,${Buffer.from(device.source.bytes).toString("base64")}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />`
-    : renderPlaceholder(screen, input.sceneSet.brandKit.palette);
+    : renderPlaceholder(screen, effectivePaletteFor(input.sceneSet));
   const cx = frame.x + frame.width / 2;
   const cy = frame.y + frame.height / 2;
 
@@ -357,8 +365,8 @@ function renderDevice(input: RenderSceneSetInput & { scene: Scene }, device: Loa
 }
 
 function renderSceneObjects(input: RenderSceneSetInput & { scene: Scene }, layer: "behind" | "front"): string {
+  if (layer === "front") return "";
   const objects = input.scene.objects
-    .filter((object) => layer === "behind" ? object.depth < 4 : object.depth >= 4)
     .map((object) => renderObject(input, object))
     .join("");
   return `<g>${objects}</g>`;
@@ -366,7 +374,7 @@ function renderSceneObjects(input: RenderSceneSetInput & { scene: Scene }, layer
 
 function renderObject(input: RenderSceneSetInput & { scene: Scene }, object: SceneObject): string {
   const { target, sceneSet } = input;
-  const palette = sceneSet.brandKit.palette;
+  const palette = effectivePaletteFor(sceneSet);
   const x = target.width * object.x;
   const y = target.height * object.y;
   const scale = object.scale;
@@ -391,20 +399,31 @@ function renderObject(input: RenderSceneSetInput & { scene: Scene }, object: Sce
   return `<g transform="${transform}" filter="url(#softShadow)"><rect x="-92" y="-92" width="184" height="184" rx="34" fill="${escapeXml(palette.accent)}"/><path d="M92 -60 L158 -96 L158 88 L92 128 Z" fill="${escapeXml(palette.primary)}" opacity="0.84"/><path d="M-92 92 H92 L158 88 L88 138 H-138 Z" fill="#fff" opacity="0.35"/><circle r="40" fill="#fff" opacity="0.36"/></g>`;
 }
 
-function renderCallouts(input: RenderSceneSetInput & { scene: Scene }, frames: DeviceFrame[]): string {
-  const palette = input.sceneSet.brandKit.palette;
-  return input.scene.callouts.map((callout) => {
-    const frame = frames[callout.anchorDevice ?? 0];
+function renderCallouts(input: RenderSceneSetInput & { scene: Scene; loadedDevices: LoadedDevice[] }, frames: DeviceFrame[]): string {
+  const palette = effectivePaletteFor(input.sceneSet);
+  return input.scene.callouts.slice(0, 1).map((callout, index) => {
+    const deviceIndex = callout.anchorDevice ?? 0;
+    const frame = frames[deviceIndex];
+    const loadedDevice = input.loadedDevices[deviceIndex];
+    const screen = frame ? screenRect(frame) : undefined;
     const x = input.target.width * callout.x;
     const y = input.target.height * callout.y;
     const anchorX = frame ? frame.x + frame.width / 2 : x - 100;
     const anchorY = frame ? frame.y + frame.height * 0.42 : y + 80;
+    const clipId = `zoomClip-${input.scene.index}-${index}`;
+    const zoomSize = 330;
+    const zoomImage = loadedDevice?.source && screen
+      ? `<image x="${x - zoomSize * 0.82}" y="${y - zoomSize * 0.88}" width="${zoomSize * 1.65}" height="${zoomSize * 1.65}" href="data:${loadedDevice.source.contentType};base64,${Buffer.from(loadedDevice.source.bytes).toString("base64")}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />`
+      : `<rect x="${x - zoomSize / 2}" y="${y - zoomSize / 2}" width="${zoomSize}" height="${zoomSize}" fill="#fff" clip-path="url(#${clipId})" />`;
     return `
       <g filter="url(#softShadow)">
-        <path d="M ${anchorX} ${anchorY} C ${x - 80} ${y - 70}, ${x - 30} ${y - 40}, ${x} ${y}" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="7" stroke-linecap="round" stroke-dasharray="18 18" />
-        <rect x="${x - 210}" y="${y - 70}" width="420" height="140" rx="42" fill="#fff" />
-        <circle cx="${x - 150}" cy="${y}" r="32" fill="${escapeXml(palette.accent)}" />
-        <text x="${x - 100}" y="${y + 10}" font-family="Arial" font-size="28" font-weight="900" fill="${escapeXml(palette.text)}">${escapeXml(callout.label)}</text>
+        <path d="M ${anchorX} ${anchorY} C ${x - 130} ${y - 120}, ${x - 80} ${y - 80}, ${x - 18} ${y - 18}" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="8" stroke-linecap="round" stroke-dasharray="18 18" opacity="0.86" />
+        <clipPath id="${clipId}"><circle cx="${x}" cy="${y}" r="${zoomSize / 2}" /></clipPath>
+        <circle cx="${x}" cy="${y}" r="${zoomSize / 2 + 16}" fill="#fff" opacity="0.94" />
+        ${zoomImage}
+        <circle cx="${x}" cy="${y}" r="${zoomSize / 2}" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="14" />
+        <rect x="${x - 150}" y="${y + zoomSize / 2 + 28}" width="300" height="72" rx="36" fill="#fff" />
+        <text x="${x}" y="${y + zoomSize / 2 + 75}" text-anchor="middle" font-family="Arial" font-size="25" font-weight="900" fill="${escapeXml(palette.text)}">${escapeXml(callout.label)}</text>
       </g>
     `;
   }).join("");
