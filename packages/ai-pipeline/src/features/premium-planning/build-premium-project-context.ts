@@ -12,9 +12,10 @@ export type PremiumProjectContext = {
 export class BuildPremiumProjectContextUseCase {
   async execute(params: BuildPremiumProjectContextInput): Promise<PremiumProjectContext> {
     const brandKit = buildBrandKit(params.input);
+    const category = canonicalCategory(params.input.category);
     const productUnderstanding = ProductUnderstandingSchema.parse({
       appName: params.input.appName,
-      category: params.input.category,
+      category,
       valueProposition: params.input.mainValueProposition,
       audience: params.input.targetAudience,
       screenInventory: params.input.screenshots.map((screenshot) => ({
@@ -35,7 +36,7 @@ export class BuildPremiumProjectContextUseCase {
 
 function buildBrandKit(input: AppInput): BrandKit {
   const manualColors = input.brand?.colors?.filter(Boolean) ?? [];
-  const defaults = categoryBrandDefaults(input.category);
+  const defaults = categoryBrandDefaults(canonicalCategory(input.category));
   const palette = manualColors.length > 0
     ? {
         background: manualColors[0] ?? defaults.palette.background,
@@ -73,6 +74,17 @@ function inferBestFor(id: string, path: string): ProductUnderstanding["screenInv
   if (role === "search" || role === "map") return ["feature", "comparison"];
   if (role === "detail") return ["feature", "proof"];
   return ["feature"];
+}
+
+function canonicalCategory(category: string): string {
+  const normalized = category.toLowerCase().trim();
+  if (["utility", "utilities", "productivity", "tools", "tool", "business"].includes(normalized)) return "utility";
+  if (["travel", "navigation", "maps", "lifestyle"].includes(normalized)) return "travel";
+  if (["finance", "fintech", "banking", "budget", "money"].includes(normalized)) return "finance";
+  if (["fitness", "health", "wellness", "sports"].includes(normalized)) return "fitness";
+  if (["education", "learning", "courses"].includes(normalized)) return "education";
+  if (["social", "social networking", "community"].includes(normalized)) return "social";
+  return normalized;
 }
 
 function categoryBrandDefaults(category: string): Omit<BrandKit, "source"> {

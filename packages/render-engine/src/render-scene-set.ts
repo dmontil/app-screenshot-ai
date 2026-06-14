@@ -30,6 +30,26 @@ type DeviceFrame = {
   depth: number;
 };
 
+export type SceneSetRenderDiagnostics = {
+  artDirection: "travel" | "finance" | "fitness" | "utility";
+  framesByScene: Array<{
+    sceneId: string;
+    composition: Scene["composition"];
+    frames: DeviceFrame[];
+  }>;
+};
+
+export function getSceneSetRenderDiagnostics(input: Pick<RenderSceneSetInput, "sceneSet" | "target">): SceneSetRenderDiagnostics {
+  return {
+    artDirection: artDirectionFor(input.sceneSet),
+    framesByScene: input.sceneSet.scenes.map((scene) => ({
+      sceneId: scene.id,
+      composition: scene.composition,
+      frames: scene.devices.map((device) => frameForDevice(input.target, scene.composition, device)),
+    })),
+  };
+}
+
 export class RenderSceneSetUseCase {
   async execute(input: RenderSceneSetInput): Promise<RenderedAsset[]> {
     const sourcePathByScreenshotId = new Map(
@@ -93,11 +113,13 @@ function buildSceneSvg(input: RenderSceneSetInput & { scene: Scene; loadedDevice
 function renderBackground(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, sceneSet, scene } = input;
   const palette = sceneSet.brandKit.palette;
-  const bg = palette.background;
-  const surface = palette.surface;
-  const primary = palette.primary;
-  const accent = palette.accent;
-  const text = palette.text;
+  const artDirection = artDirectionFor(sceneSet);
+  const categoryStage = categoryStagePalette(artDirection, palette);
+  const bg = categoryStage.background;
+  const surface = categoryStage.surface;
+  const primary = categoryStage.primary;
+  const accent = categoryStage.accent;
+  const text = categoryStage.text;
 
   if (scene.background.kind === "dark-stage") {
     return `
@@ -111,23 +133,38 @@ function renderBackground(input: RenderSceneSetInput & { scene: Scene }): string
     <linearGradient id="premiumBg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="${escapeXml(bg)}"/>
       <stop offset="48%" stop-color="${escapeXml(surface)}"/>
-      <stop offset="100%" stop-color="${escapeXml(tint(accent, 0.86))}"/>
+      <stop offset="100%" stop-color="${escapeXml(artDirection === "utility" ? "#DCEBFF" : tint(accent, 0.86))}"/>
     </linearGradient>
     <rect width="100%" height="100%" fill="url(#premiumBg)" />
     <radialGradient id="heroGlow" cx="72%" cy="18%" r="65%"><stop offset="0%" stop-color="${escapeXml(accent)}" stop-opacity="${0.34 * scene.background.intensity}"/><stop offset="100%" stop-color="${escapeXml(surface)}" stop-opacity="0"/></radialGradient>
     <rect width="100%" height="100%" fill="url(#heroGlow)" />
-    <circle cx="${target.width * 0.16}" cy="${target.height * 0.76}" r="330" fill="${escapeXml(primary)}" opacity="0.09" />
-    <circle cx="${target.width * 0.86}" cy="${target.height * 0.23}" r="240" fill="${escapeXml(accent)}" opacity="0.18" />
+    <circle cx="${target.width * 0.16}" cy="${target.height * 0.76}" r="330" fill="${escapeXml(primary)}" opacity="${artDirection === "utility" ? 0.14 : 0.09}" />
+    <circle cx="${target.width * 0.86}" cy="${target.height * 0.23}" r="240" fill="${escapeXml(artDirection === "utility" ? "#60A5FA" : accent)}" opacity="${artDirection === "utility" ? 0.22 : 0.18}" />
     <text x="${target.width - 80}" y="${target.height - 96}" text-anchor="end" font-family="Arial Black, Arial" font-size="154" font-weight="900" fill="${escapeXml(text)}" opacity="0.05">${String(scene.index).padStart(2, "0")}</text>
   `;
 }
 
+function categoryStagePalette(artDirection: SceneSetRenderDiagnostics["artDirection"], palette: SceneSet["brandKit"]["palette"]): SceneSet["brandKit"]["palette"] {
+  if (artDirection === "utility") return { ...palette, background: "#EAF2FF", surface: "#F8FBFF", text: "#0F172A", primary: "#1D4ED8", accent: palette.accent, secondary: "#BFDBFE" };
+  if (artDirection === "finance") return { ...palette, background: "#F2FBF7", surface: "#FFFFFF", text: "#082118", primary: palette.primary, accent: palette.accent };
+  if (artDirection === "fitness") return { ...palette, background: "#111827", surface: "#1F2937", text: "#F8FAFC", primary: palette.primary, accent: palette.accent };
+  return palette;
+}
+
 function renderArtDirectionLayer(input: RenderSceneSetInput & { scene: Scene }): string {
-  const keywords = input.sceneSet.brandKit.imagery.keywords.map((keyword) => keyword.toLowerCase());
-  if (keywords.some((keyword) => ["books", "maps", "routes"].includes(keyword))) return renderTravelEditorialLayer(input);
-  if (keywords.some((keyword) => ["coins", "proof"].includes(keyword))) return renderFinanceTrustLayer(input);
-  if (keywords.some((keyword) => ["rings", "trophy", "energy"].includes(keyword))) return renderFitnessEnergyLayer(input);
+  const artDirection = artDirectionFor(input.sceneSet);
+  if (artDirection === "travel") return renderTravelEditorialLayer(input);
+  if (artDirection === "finance") return renderFinanceTrustLayer(input);
+  if (artDirection === "fitness") return renderFitnessEnergyLayer(input);
   return renderUtilityDepthLayer(input);
+}
+
+function artDirectionFor(sceneSet: SceneSet): SceneSetRenderDiagnostics["artDirection"] {
+  const keywords = sceneSet.brandKit.imagery.keywords.map((keyword) => keyword.toLowerCase());
+  if (keywords.some((keyword) => ["books", "maps", "routes"].includes(keyword))) return "travel";
+  if (keywords.some((keyword) => ["coins", "proof"].includes(keyword))) return "finance";
+  if (keywords.some((keyword) => ["rings", "trophy", "energy"].includes(keyword))) return "fitness";
+  return "utility";
 }
 
 function renderTravelEditorialLayer(input: RenderSceneSetInput & { scene: Scene }): string {
@@ -385,23 +422,34 @@ function sceneDefs(_input: RenderSceneSetInput & { scene: Scene }, _frames: Devi
 }
 
 function frameForDevice(target: RenderTarget, composition: Scene["composition"], device: SceneDevice): DeviceFrame {
-  const baseRatio = composition === "cropped-edge-device" ? 0.62 : composition === "split-devices" ? 0.52 : 0.58;
-  const width = Math.round(target.width * baseRatio * device.scale);
-  const height = Math.round(width * 2.05);
+  const desiredHeightRatio = desiredDeviceHeightRatio(composition, device);
+  const scaleInfluence = composition === "split-devices" ? 1 : Math.min(1.06, Math.max(0.96, 0.86 + device.scale * 0.2));
+  const height = Math.round(target.height * desiredHeightRatio * scaleInfluence);
+  const width = Math.round(height / 2.05);
   const cx = target.width * device.x;
   const cy = target.height * device.y;
   let x = Math.round(cx - width / 2);
-  if (device.crop === "edge-right") x = Math.round(target.width - width * 0.72);
-  if (device.crop === "edge-left") x = Math.round(-width * 0.28);
+  if (device.crop === "edge-right") x = Math.round(target.width - width * 0.70);
+  if (device.crop === "edge-left") x = Math.round(-width * 0.30);
+  const minTop = target.height * (composition === "proof-poster" ? 0.26 : 0.24);
+  const maxTop = target.height - height - target.height * 0.045;
+  const unclampedY = Math.round(cy - height / 2);
+  const y = Math.round(Math.max(minTop, Math.min(maxTop, unclampedY)));
   return {
     x,
-    y: Math.round(cy - height / 2),
+    y,
     width,
     height,
     radius: Math.max(54, Math.round(width * 0.13)),
     tilt: device.tilt,
     depth: device.depth,
   };
+}
+
+function desiredDeviceHeightRatio(composition: Scene["composition"], device: SceneDevice): number {
+  if (composition === "split-devices" || composition === "before-after") return device.depth >= 5 || device.crop !== "full" ? 0.56 : 0.62;
+  if (composition === "cropped-edge-device") return 0.72;
+  return 0.70;
 }
 
 function screenRect(frame: DeviceFrame) {

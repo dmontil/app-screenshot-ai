@@ -104,12 +104,12 @@ export class PremiumRecipeLibrary {
   }
 
   retrieve(query: PremiumRecipeRetrievalQuery): PremiumRecipe[] {
-    const normalizedCategory = query.category.toLowerCase();
+    const normalizedCategory = canonicalCategory(query.category);
     const requestedTone = new Set(query.tone.map((tone) => tone.toLowerCase()));
     const limit = query.limit ?? 5;
 
     return this.recipes
-      .filter((recipe) => recipe.category.toLowerCase() === normalizedCategory)
+      .filter((recipe) => canonicalCategory(recipe.category) === normalizedCategory)
       .map((recipe) => ({ recipe, score: scorePremiumRecipe(recipe, requestedTone) }))
       .sort((a, b) => b.score - a.score || a.recipe.id.localeCompare(b.recipe.id))
       .slice(0, limit)
@@ -125,17 +125,28 @@ export class PatternLibrary {
   }
 
   retrieve(query: PatternRetrievalQuery): DesignPattern[] {
-    const normalizedCategory = query.category.toLowerCase();
+    const normalizedCategory = canonicalCategory(query.category);
     const requestedTone = new Set(query.tone.map((tone) => tone.toLowerCase()));
     const limit = query.limit ?? 5;
 
     return this.patterns
-      .filter((pattern) => pattern.category.toLowerCase() === normalizedCategory)
+      .filter((pattern) => canonicalCategory(pattern.category) === normalizedCategory)
       .map((pattern) => ({ pattern, score: scorePattern(pattern, requestedTone) }))
       .sort((a, b) => b.score - a.score || a.pattern.id.localeCompare(b.pattern.id))
       .slice(0, limit)
       .map(({ pattern }) => pattern);
   }
+}
+
+function canonicalCategory(category: string): string {
+  const normalized = category.toLowerCase().trim();
+  if (["utility", "utilities", "productivity", "tools", "tool", "business"].includes(normalized)) return "utility";
+  if (["travel", "navigation", "maps", "lifestyle"].includes(normalized)) return "travel";
+  if (["finance", "fintech", "banking", "budget", "money"].includes(normalized)) return "finance";
+  if (["fitness", "health", "wellness", "sports"].includes(normalized)) return "fitness";
+  if (["education", "learning", "courses"].includes(normalized)) return "education";
+  if (["social", "social networking", "community"].includes(normalized)) return "social";
+  return normalized;
 }
 
 function scorePremiumRecipe(recipe: PremiumRecipe, requestedTone: Set<string>): number {

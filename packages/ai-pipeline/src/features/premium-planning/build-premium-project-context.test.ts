@@ -37,4 +37,22 @@ describe("BuildPremiumProjectContextUseCase", () => {
       ["map", "map"],
     ]);
   });
+
+  it("canonicalizes utility aliases so utility apps do not fall back to travel art direction", async () => {
+    const result = await new BuildPremiumProjectContextUseCase().execute({
+      input: {
+        appName: "Toolbox",
+        category: "utilities",
+        targetAudience: "busy operators",
+        mainValueProposition: "finish tasks faster",
+        targetStores: ["app-store" as const],
+        baseLocale: "en-US",
+        screenshots: [{ id: "home", path: "input/home.png", kind: "functional" as const }],
+      },
+    });
+
+    expect(result.productUnderstanding.category).toBe("utility");
+    expect(result.brandKit.imagery.keywords).toContain("cubes");
+    expect(result.brandKit.imagery.keywords).not.toContain("books");
+  });
 });

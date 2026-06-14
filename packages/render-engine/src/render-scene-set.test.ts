@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProductUnderstanding, SceneSet } from "@app-screenshot-ai/schemas";
 
-import { RenderSceneSetUseCase } from "./render-scene-set";
+import { RenderSceneSetUseCase, getSceneSetRenderDiagnostics } from "./render-scene-set";
 
 const sceneSet: SceneSet = {
   id: "utility-premium",
@@ -68,6 +68,29 @@ const productUnderstanding: ProductUnderstanding = {
 };
 
 describe("RenderSceneSetUseCase", () => {
+  it("keeps category art direction distinct and makes primary mockups dominate the screenshot", () => {
+    const target = { store: "app-store" as const, device: "iphone-6.9" as const, locale: "en-US", width: 1320, height: 2868 };
+    const utilityDiagnostics = getSceneSetRenderDiagnostics({ sceneSet, target });
+    const travelDiagnostics = getSceneSetRenderDiagnostics({
+      sceneSet: {
+        ...sceneSet,
+        id: "travel-premium",
+        recipeId: "travel-editorial-panorama",
+        brandKit: {
+          ...sceneSet.brandKit,
+          imagery: { style: "3d", keywords: ["books", "maps", "routes"] },
+        },
+      },
+      target,
+    });
+
+    expect(utilityDiagnostics.artDirection).toBe("utility");
+    expect(travelDiagnostics.artDirection).toBe("travel");
+    expect(utilityDiagnostics.artDirection).not.toBe(travelDiagnostics.artDirection);
+    expect(utilityDiagnostics.framesByScene[0]!.frames[0]!.height / target.height).toBeGreaterThanOrEqual(0.68);
+    expect(utilityDiagnostics.framesByScene[2]!.frames[0]!.height / target.height).toBeGreaterThanOrEqual(0.68);
+  });
+
   it("renders premium SceneSet compositions and loads every device screenshot used by split mockups", async () => {
     const red = new Uint8Array(await sharp({ create: { width: 390, height: 844, channels: 4, background: "#FF5533" } }).png().toBuffer());
     const blue = new Uint8Array(await sharp({ create: { width: 390, height: 844, channels: 4, background: "#3355FF" } }).png().toBuffer());

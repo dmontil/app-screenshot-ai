@@ -60,6 +60,7 @@ describe("createDefaultPremiumRecipeLibrary", () => {
 
     expect(library.retrieve({ category: "travel", tone: ["premium"] })[0]?.id).toBe("travel-editorial-panorama");
     expect(library.retrieve({ category: "utility", tone: ["practical"] })[0]?.scenes.map((scene) => scene.composition)).toContain("split-devices");
+    expect(library.retrieve({ category: "utilities", tone: ["practical"] })[0]?.id).toBe("utility-blue-depth");
     expect(library.retrieve({ category: "finance", tone: ["trust"] })[0]?.scenes.map((scene) => scene.composition)).toContain("proof-poster");
     expect(library.retrieve({ category: "fitness", tone: ["energetic"] })[0]?.scenes.map((scene) => scene.composition)).toContain("object-led");
   });
@@ -85,8 +86,10 @@ describe("PatternLibrary", () => {
     const library = new PatternLibrary(patterns);
 
     const result = library.retrieve({ category: "travel", tone: [] });
+    const utilityAlias = library.retrieve({ category: "utilities", tone: [] });
 
     expect(result.map((pattern) => pattern.id)).toEqual(["travel_editorial_01"]);
+    expect(utilityAlias.map((pattern) => pattern.id)).toEqual(["productivity_calm_01"]);
   });
 
   it("prioritizes patterns that match requested tone", () => {
