@@ -1,5 +1,7 @@
 import { SceneSetSchema, type BrandKit, type PremiumRecipe, type ProductUnderstanding, type SceneSet } from "@app-screenshot-ai/schemas";
 
+import { BuildBackgroundPlatesUseCase } from "./build-background-plates";
+
 export type BuildPremiumSceneSetInput = {
   brandKit: BrandKit;
   productUnderstanding: ProductUnderstanding;
@@ -8,7 +10,9 @@ export type BuildPremiumSceneSetInput = {
 
 export class BuildPremiumSceneSetUseCase {
   execute(input: BuildPremiumSceneSetInput): SceneSet {
+    const backgroundPlates = new BuildBackgroundPlatesUseCase().execute(input);
     const scenes = input.recipe.scenes.slice(0, 5).map((recipeScene, index) => {
+      const plate = backgroundPlates[index % backgroundPlates.length];
       const role = input.recipe.setRhythm[index] ?? "feature";
       const selectedScreens = selectScreens(input.productUnderstanding, role, recipeScene.deviceSlots);
       return {
@@ -25,6 +29,7 @@ export class BuildPremiumSceneSetUseCase {
           kind: backgroundFor(input.recipe.id, recipeScene.composition),
           paletteRole: index % 2 === 0 ? "background" : "surface",
           intensity: input.recipe.qualityTarget === "top-1-percent" ? 0.92 : 0.78,
+          ...(plate ? { plateId: plate.id } : {}),
         },
         devices: selectedScreens.map((screen, deviceIndex) => ({
           screenshotId: screen.screenshotId,
@@ -61,6 +66,7 @@ export class BuildPremiumSceneSetUseCase {
         recurringObjects: input.brandKit.imagery.keywords.slice(0, 3),
         deviceTreatment: "progressive",
       },
+      backgroundPlates,
       scenes,
     });
   }

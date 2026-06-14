@@ -1,6 +1,6 @@
 import sharp from "sharp";
 
-import type { ProductUnderstanding, RenderedAsset, RenderTarget, Scene, SceneDevice, SceneObject, SceneSet } from "@app-screenshot-ai/schemas";
+import type { BackgroundPlateSpec, ProductUnderstanding, RenderedAsset, RenderTarget, Scene, SceneDevice, SceneObject, SceneSet } from "@app-screenshot-ai/schemas";
 
 export type RenderSceneSetSource = {
   bytes: Uint8Array;
@@ -125,6 +125,11 @@ function renderBackground(input: RenderSceneSetInput & { scene: Scene }): string
   const accent = categoryStage.accent;
   const text = categoryStage.text;
 
+  const plate = backgroundPlateFor(sceneSet, scene);
+  if (plate) {
+    return renderPlateBase(input, plate);
+  }
+
   if (scene.background.kind === "dark-stage") {
     return `
       <rect width="100%" height="100%" fill="#070912" />
@@ -160,11 +165,106 @@ function categoryStagePalette(artDirection: SceneSetRenderDiagnostics["artDirect
 }
 
 function renderArtDirectionLayer(input: RenderSceneSetInput & { scene: Scene }): string {
+  const plate = backgroundPlateFor(input.sceneSet, input.scene);
+  if (plate) return renderBackgroundPlate(input, plate);
   const artDirection = artDirectionFor(input.sceneSet);
   if (artDirection === "travel") return renderTravelEditorialLayer(input);
   if (artDirection === "finance") return renderFinanceTrustLayer(input);
   if (artDirection === "fitness") return renderFitnessEnergyLayer(input);
   return renderUtilityDepthLayer(input);
+}
+
+function backgroundPlateFor(sceneSet: SceneSet, scene: Scene): BackgroundPlateSpec | undefined {
+  return sceneSet.backgroundPlates?.find((plate) => plate.id === scene.background.plateId) ?? sceneSet.backgroundPlates?.[scene.index - 1] ?? sceneSet.backgroundPlates?.[0];
+}
+
+function renderPlateBase(input: RenderSceneSetInput & { scene: Scene }, plate: BackgroundPlateSpec): string {
+  const { target, scene } = input;
+  const base = scene.background.kind === "dark-stage" ? "#070912" : plate.palette.base;
+  const paperNoise = plate.texture === "aged-paper" || plate.texture === "ledger-paper"
+    ? `<filter id="paperNoise"><feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="4" seed="${scene.index + 7}"/><feColorMatrix type="matrix" values="0 0 0 0 0.72 0 0 0 0 0.64 0 0 0 0 0.50 0 0 0 0.12 0"/></filter><rect width="100%" height="100%" filter="url(#paperNoise)" opacity="0.42"/>`
+    : `<filter id="softNoise"><feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="3" seed="${scene.index + 13}"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#softNoise)" opacity="0.08"/>`;
+  return `
+    <rect width="100%" height="100%" fill="${escapeXml(base)}" />
+    <linearGradient id="plateWash" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff" stop-opacity="0.42"/><stop offset="58%" stop-color="${escapeXml(plate.palette.base)}" stop-opacity="0.18"/><stop offset="100%" stop-color="${escapeXml(plate.palette.accent)}" stop-opacity="0.10"/></linearGradient>
+    <rect width="100%" height="100%" fill="url(#plateWash)" />
+    ${paperNoise}
+    <rect x="${target.width * plate.safeZone.x}" y="${target.height * plate.safeZone.y}" width="${target.width * plate.safeZone.width}" height="${target.height * plate.safeZone.height}" rx="80" fill="#fff" opacity="0.015" />
+  `;
+}
+
+function renderBackgroundPlate(input: RenderSceneSetInput & { scene: Scene }, plate: BackgroundPlateSpec): string {
+  if (plate.style === "literary-map-sketch") return renderLiteraryMapPlate(input, plate);
+  if (plate.style === "utility-flow-system") return renderUtilityFlowPlate(input, plate);
+  if (plate.style === "finance-ledger-engraving") return renderFinanceLedgerPlate(input, plate);
+  if (plate.style === "fitness-kinetic") return renderFitnessKineticPlate(input, plate);
+  return renderAbstractMaterialPlate(input, plate);
+}
+
+function renderLiteraryMapPlate(input: RenderSceneSetInput & { scene: Scene }, plate: BackgroundPlateSpec): string {
+  const { target, scene } = input;
+  const ink = plate.palette.ink;
+  const accent = plate.palette.accent;
+  const coast = `M ${target.width * 0.56} ${target.height * 0.05} C ${target.width * 0.74} ${target.height * 0.13}, ${target.width * 0.63} ${target.height * 0.26}, ${target.width * 0.83} ${target.height * 0.34} C ${target.width * 0.66} ${target.height * 0.44}, ${target.width * 0.87} ${target.height * 0.54}, ${target.width * 0.70} ${target.height * 0.66} C ${target.width * 0.88} ${target.height * 0.78}, ${target.width * 0.69} ${target.height * 0.88}, ${target.width * 0.91} ${target.height * 0.97}`;
+  return `
+    <g opacity="0.86">
+      <g transform="translate(${target.width * 0.56}, ${target.height * 0.05}) scale(1.18)" opacity="0.46">
+        <path d="M80 0 C190 40, 130 160, 270 220 C170 300, 310 390, 205 500 C320 610, 185 720, 330 850" fill="none" stroke="${escapeXml(ink)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M210 90 C270 126, 260 205, 336 240 M120 340 C218 318, 250 410, 350 380 M150 610 C230 560, 285 700, 390 650" fill="none" stroke="${escapeXml(ink)}" stroke-width="2.5" stroke-linecap="round" opacity="0.72" />
+        <path d="M48 188 C102 152, 156 190, 170 250 C112 270, 72 238, 48 188 Z M220 455 C284 420, 334 470, 320 536 C250 544, 220 510, 220 455 Z" fill="none" stroke="${escapeXml(ink)}" stroke-width="2.5" opacity="0.58" />
+      </g>
+      <path d="${coast}" fill="none" stroke="${escapeXml(ink)}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.32" />
+      <path d="M ${target.width * 0.64} ${target.height * 0.19} C ${target.width * 0.78} ${target.height * 0.25}, ${target.width * 0.76} ${target.height * 0.42}, ${target.width * 0.92} ${target.height * 0.47}" fill="none" stroke="${escapeXml(ink)}" stroke-width="3" stroke-dasharray="8 16" opacity="0.34" />
+      <path d="M ${target.width * 0.52} ${target.height * 0.60} C ${target.width * 0.68} ${target.height * 0.52}, ${target.width * 0.78} ${target.height * 0.73}, ${target.width * 0.96} ${target.height * 0.64}" fill="none" stroke="${escapeXml(accent)}" stroke-width="5" stroke-dasharray="18 18" opacity="0.32" />
+      ${Array.from({ length: 11 }, (_, index) => `<circle cx="${target.width * (0.58 + ((index * 37) % 34) / 100)}" cy="${target.height * (0.12 + index * 0.074)}" r="${18 + (index % 3) * 7}" fill="none" stroke="${escapeXml(ink)}" stroke-width="1.5" opacity="0.12"/>`).join("")}
+      <g transform="translate(${target.width * 0.82}, ${target.height * (0.25 + (scene.index % 2) * 0.08)}) rotate(-18)" opacity="0.50">
+        <path d="M-104 -46 C-56 -88, -10 -74, 0 -28 C12 -78, 64 -86, 112 -42 L106 68 C58 34, 20 42, 0 84 C-20 42, -58 34, -106 68 Z" fill="none" stroke="${escapeXml(ink)}" stroke-width="6" stroke-linejoin="round"/>
+        <path d="M0 -28 V84" stroke="${escapeXml(ink)}" stroke-width="3" />
+        <path d="M-76 -20 C-48 -36, -22 -28, -8 -10 M28 -16 C56 -30, 80 -24, 96 -6" fill="none" stroke="${escapeXml(ink)}" stroke-width="2" opacity="0.55"/>
+      </g>
+      <g transform="translate(${target.width * 0.22}, ${target.height * 0.38})" opacity="0.28">
+        <path d="M-120 60 L-60 8 L0 58 L70 -10 L150 70" fill="none" stroke="${escapeXml(ink)}" stroke-width="5"/>
+        <path d="M-126 88 H154" stroke="${escapeXml(ink)}" stroke-width="3"/>
+        <path d="M-86 64 V88 M-30 38 V88 M44 30 V88 M104 48 V88" stroke="${escapeXml(ink)}" stroke-width="3"/>
+      </g>
+      <text x="${target.width * 0.63}" y="${target.height * 0.18}" font-family="Georgia, serif" font-size="28" fill="${escapeXml(ink)}" opacity="0.42" font-style="italic">Rutas de Libros</text>
+      <text x="${target.width * 0.65}" y="${target.height * 0.63}" font-family="Georgia, serif" font-size="25" fill="${escapeXml(ink)}" opacity="0.30" font-style="italic">Rutas de Libros</text>
+    </g>
+  `;
+}
+
+function renderUtilityFlowPlate(input: RenderSceneSetInput & { scene: Scene }, plate: BackgroundPlateSpec): string {
+  const { target, scene } = input;
+  const ink = plate.palette.ink;
+  const accent = plate.palette.accent;
+  return `
+    <g opacity="0.82">
+      ${Array.from({ length: 10 }, (_, index) => `<path d="M ${target.width * (0.52 + index * 0.045)} 0 V ${target.height}" stroke="${escapeXml(ink)}" stroke-width="2" opacity="0.06"/>`).join("")}
+      ${Array.from({ length: 16 }, (_, index) => `<path d="M ${target.width * 0.48} ${target.height * (0.12 + index * 0.055)} H ${target.width}" stroke="${escapeXml(ink)}" stroke-width="2" opacity="0.045"/>`).join("")}
+      <path d="M ${target.width * 0.55} ${target.height * 0.24} C ${target.width * 0.74} ${target.height * 0.16}, ${target.width * 0.75} ${target.height * 0.48}, ${target.width * 0.93} ${target.height * 0.38}" fill="none" stroke="${escapeXml(accent)}" stroke-width="7" stroke-linecap="round" stroke-dasharray="22 24" opacity="0.22" />
+      ${[0, 1, 2, 3].map((index) => `<g transform="translate(${target.width * (0.68 + (index % 2) * 0.16)}, ${target.height * (0.18 + index * 0.13)}) rotate(${-8 + index * 5})" filter="url(#softShadow)" opacity="${0.34 - index * 0.03}"><rect x="-110" y="-58" width="220" height="116" rx="28" fill="#fff"/><circle cx="-62" cy="0" r="15" fill="${escapeXml(accent)}"/><rect x="-32" y="-14" width="88" height="14" rx="7" fill="${escapeXml(ink)}"/><rect x="-32" y="14" width="124" height="12" rx="6" fill="${escapeXml(accent)}" opacity="0.42"/></g>`).join("")}
+      <text x="${target.width * 0.62}" y="${target.height * 0.83}" font-family="Arial Black, Arial" font-size="132" fill="${escapeXml(accent)}" opacity="0.045">FLOW</text>
+    </g>
+  `;
+}
+
+function renderFinanceLedgerPlate(input: RenderSceneSetInput & { scene: Scene }, plate: BackgroundPlateSpec): string {
+  const { target } = input;
+  const ink = plate.palette.ink;
+  const accent = plate.palette.accent;
+  return `<g opacity="0.74">${Array.from({ length: 18 }, (_, index) => `<path d="M ${target.width * 0.52} ${target.height * (0.1 + index * 0.045)} H ${target.width * 0.96}" stroke="${escapeXml(ink)}" stroke-width="2" opacity="0.10"/>`).join("")}<circle cx="${target.width * 0.78}" cy="${target.height * 0.28}" r="240" fill="none" stroke="${escapeXml(accent)}" stroke-width="12" opacity="0.14"/><circle cx="${target.width * 0.78}" cy="${target.height * 0.28}" r="154" fill="none" stroke="${escapeXml(ink)}" stroke-dasharray="20 18" opacity="0.18"/></g>`;
+}
+
+function renderFitnessKineticPlate(input: RenderSceneSetInput & { scene: Scene }, plate: BackgroundPlateSpec): string {
+  const { target } = input;
+  const ink = plate.palette.ink;
+  const accent = plate.palette.accent;
+  return `<g opacity="0.78"><path d="M ${target.width * 0.52} ${target.height * 0.72} C ${target.width * 0.74} ${target.height * 0.30}, ${target.width * 0.78} ${target.height * 0.80}, ${target.width * 1.05} ${target.height * 0.28}" fill="none" stroke="${escapeXml(accent)}" stroke-width="30" stroke-linecap="round" opacity="0.16"/><path d="M ${target.width * 0.48} ${target.height * 0.62} C ${target.width * 0.70} ${target.height * 0.22}, ${target.width * 0.82} ${target.height * 0.68}, ${target.width * 1.04} ${target.height * 0.42}" fill="none" stroke="${escapeXml(ink)}" stroke-width="6" stroke-dasharray="18 20" opacity="0.28"/></g>`;
+}
+
+function renderAbstractMaterialPlate(input: RenderSceneSetInput & { scene: Scene }, plate: BackgroundPlateSpec): string {
+  const { target } = input;
+  return `<g opacity="0.5"><circle cx="${target.width * 0.82}" cy="${target.height * 0.22}" r="300" fill="${escapeXml(plate.palette.accent)}" opacity="0.12"/><path d="M ${target.width * 0.54} ${target.height * 0.12} L ${target.width * 0.98} ${target.height * 0.28} L ${target.width * 0.82} ${target.height * 0.88} L ${target.width * 0.44} ${target.height * 0.60} Z" fill="#fff" opacity="0.22"/></g>`;
 }
 
 function artDirectionFor(sceneSet: SceneSet): SceneSetRenderDiagnostics["artDirection"] {

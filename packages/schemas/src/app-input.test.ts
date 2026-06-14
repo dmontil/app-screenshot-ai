@@ -109,6 +109,50 @@ describe("SceneSetSchema", () => {
 
     expect(result.success).toBe(true);
   });
+
+  it("accepts reusable high-quality background plate specs", () => {
+    const result = SceneSetSchema.safeParse({
+      id: "literarytrip-premium-v2",
+      brandKit: {
+        source: "category-default",
+        palette: { background: "#F7F1E7", surface: "#FFFAF2", text: "#24160F", primary: "#3B2416", accent: "#D99A32" },
+        typography: { weight: 780, mood: "serif-editorial" },
+        imagery: { style: "illustration", keywords: ["books", "maps", "routes"] },
+        tone: ["warm", "editorial", "premium"],
+      },
+      recipeId: "travel-editorial-panorama",
+      continuity: { sharedBackground: "panorama", recurringObjects: ["maps"], deviceTreatment: "progressive" },
+      backgroundPlates: [
+        {
+          id: "travel-paper-map-a",
+          style: "literary-map-sketch",
+          texture: "aged-paper",
+          contrast: "low",
+          motifs: ["map-lines", "open-book", "city-sketch"],
+          palette: { base: "#F7F1E7", ink: "#9B8972", accent: "#D99A32" },
+          safeZone: { x: 0.08, y: 0.22, width: 0.58, height: 0.72 },
+        },
+      ],
+      scenes: [
+        {
+          id: "hook",
+          index: 1,
+          role: "hook",
+          composition: "hero-poster",
+          copy: { headline: "Walk through books" },
+          background: { kind: "panorama", paletteRole: "background", intensity: 0.9, plateId: "travel-paper-map-a" },
+          devices: [{ screenshotId: "home", x: 0.34, y: 0.52, scale: 0.72, tilt: -8, crop: "full", depth: 3 }],
+          objects: [],
+          callouts: [],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.backgroundPlates?.[0]?.style).toBe("literary-map-sketch");
+    expect(result.data.scenes[0]?.background.plateId).toBe("travel-paper-map-a");
+  });
 });
 
 describe("StoryboardSchema", () => {

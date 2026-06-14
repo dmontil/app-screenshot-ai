@@ -181,6 +181,26 @@ export const SceneObjectSchema = z.object({
 });
 export type SceneObject = z.infer<typeof SceneObjectSchema>;
 
+export const BackgroundPlateSpecSchema = z.object({
+  id: z.string().min(1),
+  style: z.enum(["literary-map-sketch", "utility-flow-system", "finance-ledger-engraving", "fitness-kinetic", "abstract-material"]),
+  texture: z.enum(["aged-paper", "soft-noise", "blueprint", "ledger-paper", "dark-grain", "none"]),
+  contrast: z.enum(["low", "medium"]),
+  motifs: z.array(z.string().min(1)),
+  palette: z.object({
+    base: z.string().min(1),
+    ink: z.string().min(1),
+    accent: z.string().min(1),
+  }),
+  safeZone: z.object({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    width: z.number().min(0).max(1),
+    height: z.number().min(0).max(1),
+  }),
+});
+export type BackgroundPlateSpec = z.infer<typeof BackgroundPlateSpecSchema>;
+
 export const SceneSchema = z.object({
   id: z.string().min(1),
   index: z.number().int().positive(),
@@ -195,6 +215,7 @@ export const SceneSchema = z.object({
     kind: z.enum(["gradient", "mesh", "photo", "panorama", "dark-stage", "solid"]),
     paletteRole: z.string().min(1),
     intensity: z.number().min(0).max(1),
+    plateId: z.string().min(1).optional(),
   }),
   devices: z.array(SceneDeviceSchema),
   objects: z.array(SceneObjectSchema),
@@ -216,6 +237,7 @@ export const SceneSetSchema = z.object({
     recurringObjects: z.array(z.string().min(1)),
     deviceTreatment: z.enum(["consistent", "progressive"]),
   }),
+  backgroundPlates: z.array(BackgroundPlateSpecSchema).optional(),
   scenes: z.array(SceneSchema).min(1),
 });
 export type SceneSet = z.infer<typeof SceneSetSchema>;

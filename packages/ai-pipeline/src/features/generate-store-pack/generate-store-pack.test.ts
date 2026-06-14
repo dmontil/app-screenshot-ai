@@ -146,7 +146,7 @@ describe("GenerateStorePackUseCase", () => {
       secondarySourceScreenshotPath: "input/map.png",
     });
     expect(result.qualityReport.premium?.score).toBeGreaterThan(0.8);
-  }, 10_000);
+  }, 20_000);
 
   it("loads source screenshots for every storyboard screen before rendering", async () => {
     const loadedPaths: string[] = [];

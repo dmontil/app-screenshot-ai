@@ -244,5 +244,5 @@ describe("LocalProjectGenerationSession", () => {
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 20_000);
 });

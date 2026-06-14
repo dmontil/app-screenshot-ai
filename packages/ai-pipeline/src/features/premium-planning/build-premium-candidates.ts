@@ -99,7 +99,7 @@ function makeDarkPremium(sceneSet: SceneSet): SceneSet {
     continuity: { ...sceneSet.continuity, sharedBackground: "gradient", deviceTreatment: "progressive" },
     scenes: sceneSet.scenes.map((scene, index) => ({
       ...scene,
-      background: { kind: "dark-stage", paletteRole: "background", intensity: 1 },
+      background: { ...scene.background, kind: "dark-stage", paletteRole: "background", intensity: 1 },
       objects: [...scene.objects, decorativeObject(sceneSet, index, 0)],
     })),
   });
@@ -137,7 +137,7 @@ function makeDirectorCut(sceneSet: SceneSet): SceneSet {
       return {
         ...scene,
         composition: compositions[index] ?? scene.composition,
-        background: { kind: backgroundKinds[index] ?? scene.background.kind, paletteRole: scene.background.paletteRole, intensity: 1 },
+        background: { ...scene.background, kind: backgroundKinds[index] ?? scene.background.kind, paletteRole: scene.background.paletteRole, intensity: 1 },
         devices,
         callouts: index === 2 ? [{ label: "Compare flows", x: 0.64, y: 0.58, anchorDevice: 1 }] : scene.callouts,
         objects: [

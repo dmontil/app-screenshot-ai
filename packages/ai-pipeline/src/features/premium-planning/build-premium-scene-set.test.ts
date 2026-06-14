@@ -53,6 +53,8 @@ describe("BuildPremiumSceneSetUseCase", () => {
       "cropped-edge-device",
       "object-led",
     ]);
+    expect(sceneSet.backgroundPlates?.[0]).toMatchObject({ style: "utility-flow-system", texture: "blueprint" });
+    expect(sceneSet.scenes[0]?.background.plateId).toBe(sceneSet.backgroundPlates?.[0]?.id);
     expect(sceneSet.scenes[1]?.devices).toHaveLength(2);
     expect(sceneSet.scenes[0]?.objects[0]).toMatchObject({ kind: "3d-cube", assetId: "utility/cubes-primary" });
   });
