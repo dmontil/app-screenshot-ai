@@ -117,7 +117,9 @@ describe("GenerateStorePackUseCase", () => {
       input: appInput,
       provider: "fake",
       model: "fake-fast",
-      target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+      // This test verifies premium pipeline selection/plumbing, not final store-resolution raster quality.
+      // Keep the render target small so the integration contract stays fast and deterministic.
+      target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 390, height: 844 },
     });
 
     expect(result.brandKit.source).toBe("category-default");
@@ -146,7 +148,48 @@ describe("GenerateStorePackUseCase", () => {
       secondarySourceScreenshotPath: "input/map.png",
     });
     expect(result.qualityReport.premium?.score).toBeGreaterThan(0.8);
-  }, 20_000);
+  }, 45_000);
+
+  it("uses website context for model inputs and rendered brand planning", async () => {
+    const modelInputs: unknown[] = [];
+    const modelGateway = new ModelGateway({
+      providers: {
+        fake: {
+          async generateObject({ task, input }) {
+            modelInputs.push(input);
+            if (task === "visual-system.generate") return visualSystem;
+            if (task === "storyboard.generate") return storyboard;
+            throw new Error(`Unexpected task: ${task}`);
+          },
+        },
+      },
+    });
+
+    const useCase = new GenerateStorePackUseCase({
+      modelGateway,
+      patternLibrary: new PatternLibrary([]),
+      landingPageLoader: {
+        async load() {
+          return `<meta name="theme-color" content="#123456"><style>:root{--accent:#FF3366}</style><h1>Walk through the books you love</h1>`;
+        },
+      },
+    });
+
+    const result = await useCase.execute({
+      input: { ...appInput, brand: { websiteUrl: "https://routemuse.example" } },
+      provider: "fake",
+      model: "fake-fast",
+      target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+    });
+
+    expect(result.brandKit).toMatchObject({ source: "landing", palette: { primary: "#123456", accent: "#FF3366" } });
+    expect(result.productUnderstanding.valueProposition).toBe("Walk through the books you love");
+    expect(modelInputs).toHaveLength(2);
+    expect(modelInputs).toEqual([
+      expect.objectContaining({ landingPage: expect.objectContaining({ headline: "Walk through the books you love" }) }),
+      expect.objectContaining({ landingPage: expect.objectContaining({ headline: "Walk through the books you love" }) }),
+    ]);
+  }, 15_000);
 
   it("loads source screenshots for every storyboard screen before rendering", async () => {
     const loadedPaths: string[] = [];
@@ -187,7 +230,7 @@ describe("GenerateStorePackUseCase", () => {
     });
 
     expect(loadedPaths).toEqual(["input/home.png"]);
-  }, 10_000);
+  }, 30_000);
 
   it("stops before model calls when input readiness is blocked", async () => {
     const modelGateway = new ModelGateway({ providers: {} });

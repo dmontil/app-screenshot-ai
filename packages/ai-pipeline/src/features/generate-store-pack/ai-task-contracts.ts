@@ -3,6 +3,7 @@ import {
   VisualSystemSchema,
   type AppInput,
   type DesignPattern,
+  type LandingPageContext,
   type Storyboard,
   type VisualSystem,
 } from "@app-screenshot-ai/schemas";
@@ -15,6 +16,7 @@ export type AiTaskContract<TSchema extends z.ZodType, TOutputContract> = {
     app: AppInput;
     patterns: DesignPattern[];
     visualSystem?: VisualSystem;
+    landingPage?: LandingPageContext;
     outputContract: TOutputContract;
   };
   fixture: () => z.infer<TSchema>;
@@ -23,6 +25,7 @@ export type AiTaskContract<TSchema extends z.ZodType, TOutputContract> = {
 export function visualSystemTaskContract(params: {
   app: AppInput;
   patterns: DesignPattern[];
+  landingPage?: LandingPageContext;
 }): AiTaskContract<typeof VisualSystemSchema, ReturnType<typeof visualSystemOutputContract>> {
   return {
     task: "visual-system.generate",
@@ -30,6 +33,7 @@ export function visualSystemTaskContract(params: {
     input: {
       app: params.app,
       patterns: params.patterns,
+      ...(params.landingPage ? { landingPage: params.landingPage } : {}),
       outputContract: visualSystemOutputContract(),
     },
     fixture: fixtureVisualSystem,
@@ -40,6 +44,7 @@ export function storyboardTaskContract(params: {
   app: AppInput;
   patterns: DesignPattern[];
   visualSystem: VisualSystem;
+  landingPage?: LandingPageContext;
 }): AiTaskContract<typeof StoryboardSchema, ReturnType<typeof storyboardOutputContract>> {
   return {
     task: "storyboard.generate",
@@ -48,6 +53,7 @@ export function storyboardTaskContract(params: {
       app: params.app,
       visualSystem: params.visualSystem,
       patterns: params.patterns,
+      ...(params.landingPage ? { landingPage: params.landingPage } : {}),
       outputContract: storyboardOutputContract(params.app.screenshots.map((screenshot) => screenshot.path)),
     },
     fixture: () => fixtureStoryboard(params.app.screenshots.map((screenshot) => screenshot.path)),
@@ -93,6 +99,7 @@ function storyboardOutputContract(sourceScreenshotPaths: string[]) {
       "Use at least 3 different treatments across the 5 screens.",
       "Allowed treatments: map-route-editorial, premium-proof-card, cinematic-poster, callout-zoom, hero-device.",
       "Each headline must be 8 words or fewer.",
+      "Use landingPage headline/description as product context when it is provided, but keep every screenshot headline under 8 words.",
       "Use only sourceScreenshotPath and secondarySourceScreenshotPath values from the provided app.screenshots list.",
       "Use secondarySourceScreenshotPath on 1-2 screens where showing two app moments increases clarity; do not use it on every screen.",
       "Indexes must be 1 through 5.",

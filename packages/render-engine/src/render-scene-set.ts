@@ -186,7 +186,7 @@ function renderPlateBase(input: RenderSceneSetInput & { scene: Scene }, plate: B
     : `<filter id="softNoise"><feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="3" seed="${scene.index + 13}"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#softNoise)" opacity="0.08"/>`;
   return `
     <rect width="100%" height="100%" fill="${escapeXml(base)}" />
-    <linearGradient id="plateWash" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff" stop-opacity="0.42"/><stop offset="58%" stop-color="${escapeXml(plate.palette.base)}" stop-opacity="0.18"/><stop offset="100%" stop-color="${escapeXml(plate.palette.accent)}" stop-opacity="0.10"/></linearGradient>
+    <linearGradient id="plateWash" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff" stop-opacity="0.38"/><stop offset="42%" stop-color="${escapeXml(plate.palette.base)}" stop-opacity="0.10"/><stop offset="100%" stop-color="${escapeXml(plate.palette.accent)}" stop-opacity="0.24"/></linearGradient>
     <rect width="100%" height="100%" fill="url(#plateWash)" />
     ${paperNoise}
     <rect x="${target.width * plate.safeZone.x}" y="${target.height * plate.safeZone.y}" width="${target.width * plate.safeZone.width}" height="${target.height * plate.safeZone.height}" rx="80" fill="#fff" opacity="0.015" />
@@ -263,8 +263,19 @@ function renderFitnessKineticPlate(input: RenderSceneSetInput & { scene: Scene }
 }
 
 function renderAbstractMaterialPlate(input: RenderSceneSetInput & { scene: Scene }, plate: BackgroundPlateSpec): string {
-  const { target } = input;
-  return `<g opacity="0.5"><circle cx="${target.width * 0.82}" cy="${target.height * 0.22}" r="300" fill="${escapeXml(plate.palette.accent)}" opacity="0.12"/><path d="M ${target.width * 0.54} ${target.height * 0.12} L ${target.width * 0.98} ${target.height * 0.28} L ${target.width * 0.82} ${target.height * 0.88} L ${target.width * 0.44} ${target.height * 0.60} Z" fill="#fff" opacity="0.22"/></g>`;
+  const { target, scene } = input;
+  const dark = scene.background.kind === "dark-stage";
+  const baseShadow = dark ? "#111827" : "#8A5A2B";
+  return `
+    <g>
+      <radialGradient id="materialGlow-${scene.index}" cx="70%" cy="28%" r="78%"><stop offset="0%" stop-color="${escapeXml(plate.palette.accent)}" stop-opacity="${dark ? 0.30 : 0.28}"/><stop offset="44%" stop-color="#FFFFFF" stop-opacity="${dark ? 0.04 : 0.18}"/><stop offset="100%" stop-color="${escapeXml(plate.palette.base)}" stop-opacity="0"/></radialGradient>
+      <rect width="100%" height="100%" fill="url(#materialGlow-${scene.index})" />
+      <ellipse cx="${target.width * 0.76}" cy="${target.height * 0.33}" rx="${target.width * 0.48}" ry="${target.height * 0.22}" fill="#FFFFFF" opacity="${dark ? 0.08 : 0.24}" filter="url(#premiumBlur)" transform="rotate(-14 ${target.width * 0.76} ${target.height * 0.33})" />
+      <ellipse cx="${target.width * 0.38}" cy="${target.height * 0.82}" rx="${target.width * 0.62}" ry="${target.height * 0.24}" fill="${escapeXml(plate.palette.accent)}" opacity="${dark ? 0.12 : 0.20}" filter="url(#premiumBlur)" transform="rotate(10 ${target.width * 0.38} ${target.height * 0.82})" />
+      <rect x="${target.width * 0.50}" y="${target.height * 0.10}" width="${target.width * 0.66}" height="${target.height * 0.66}" rx="120" fill="#FFFFFF" opacity="${dark ? 0.07 : 0.22}" transform="rotate(8 ${target.width * 0.82} ${target.height * 0.46})" filter="url(#softShadow)" />
+      <rect x="${target.width * 0.60}" y="${target.height * 0.22}" width="${target.width * 0.36}" height="${target.height * 0.30}" rx="74" fill="${escapeXml(baseShadow)}" opacity="${dark ? 0.10 : 0.08}" transform="rotate(-10 ${target.width * 0.78} ${target.height * 0.36})" />
+    </g>
+  `;
 }
 
 function artDirectionFor(sceneSet: SceneSet): SceneSetRenderDiagnostics["artDirection"] {
@@ -278,36 +289,23 @@ function artDirectionFor(sceneSet: SceneSet): SceneSetRenderDiagnostics["artDire
 function renderTravelEditorialLayer(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, scene, sceneSet } = input;
   const palette = effectivePaletteFor(sceneSet);
-  const headline = scene.role === "cta" ? "START" : scene.role === "proof" ? "TRUST" : "ROUTE";
-  const pinY = target.height * (0.58 + (scene.index % 3) * 0.06);
-  const paperOpacity = scene.composition === "cropped-edge-device" ? 0.64 : 0.46;
+  const isDark = scene.background.kind === "dark-stage";
+  const panelFill = isDark ? "#111827" : "#FFFFFF";
+  const panelOpacity = isDark ? 0.20 : 0.34;
   const bookStack = scene.composition === "object-led" || scene.index % 2 === 1
-    ? `<g transform="translate(${target.width * 0.73}, ${target.height * 0.69}) rotate(-8)" filter="url(#softShadow)">
-        <rect x="-170" y="-74" width="340" height="148" rx="18" fill="${escapeXml(palette.primary)}" />
-        <rect x="-150" y="-54" width="300" height="108" rx="14" fill="${escapeXml(palette.surface)}" opacity="0.86" />
-        <rect x="-110" y="-142" width="300" height="148" rx="18" fill="${escapeXml(palette.accent)}" opacity="0.86" />
-        <rect x="-92" y="-122" width="264" height="108" rx="14" fill="#fff" opacity="0.48" />
-        <path d="M -10 -122 V -14" stroke="${escapeXml(palette.primary)}" stroke-width="7" opacity="0.56" />
+    ? `<g transform="translate(${target.width * 0.78}, ${target.height * 0.70}) rotate(-8)" filter="url(#softShadow)" opacity="0.58">
+        <rect x="-150" y="-66" width="300" height="132" rx="18" fill="${escapeXml(palette.primary)}" />
+        <rect x="-128" y="-46" width="256" height="92" rx="14" fill="${escapeXml(palette.surface)}" opacity="0.90" />
+        <rect x="-104" y="-126" width="260" height="126" rx="18" fill="${escapeXml(palette.accent)}" opacity="0.82" />
+        <rect x="-84" y="-106" width="220" height="86" rx="14" fill="#fff" opacity="0.40" />
       </g>`
     : "";
 
   return `
     <g>
-      <path d="M -80 ${target.height * 0.40} C ${target.width * 0.24} ${target.height * 0.22}, ${target.width * 0.58} ${target.height * 0.72}, ${target.width + 120} ${target.height * 0.36}" fill="none" stroke="${escapeXml(palette.primary)}" stroke-width="2" stroke-dasharray="10 20" opacity="0.18" />
-      <path d="M -90 ${target.height * 0.74} C ${target.width * 0.24} ${target.height * 0.58}, ${target.width * 0.55} ${target.height * 0.90}, ${target.width + 120} ${target.height * 0.58}" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="6" stroke-dasharray="18 24" opacity="0.26" />
-      <g transform="translate(${target.width * 0.62}, ${target.height * 0.32}) rotate(7)">
-        <rect x="-238" y="-120" width="476" height="710" rx="42" fill="#fff" opacity="${paperOpacity}" filter="url(#softShadow)" />
-        <text x="-188" y="-38" font-family="Arial" font-size="24" font-weight="900" fill="${escapeXml(palette.accent)}" letter-spacing="5" opacity="0.86">${headline} NOTES</text>
-        ${Array.from({ length: 6 }, (_, index) => `<path d="M -184 ${42 + index * 82} H 184" stroke="${escapeXml(palette.primary)}" stroke-width="3" opacity="${0.08 + index * 0.01}"/>`).join("")}
-        <path d="M -150 120 C -58 48, 48 206, 146 106" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="10" stroke-linecap="round" opacity="0.28" />
-        <circle cx="-150" cy="120" r="18" fill="${escapeXml(palette.accent)}" opacity="0.68" />
-        <circle cx="146" cy="106" r="18" fill="${escapeXml(palette.primary)}" opacity="0.42" />
-      </g>
-      <g transform="translate(${target.width * 0.16}, ${pinY})" filter="url(#softShadow)">
-        <rect x="-96" y="-42" width="192" height="84" rx="42" fill="#fff" opacity="0.74" />
-        <circle cx="-48" cy="0" r="16" fill="${escapeXml(palette.accent)}" />
-        <text x="-18" y="9" font-family="Arial" font-size="24" font-weight="900" fill="${escapeXml(palette.text)}">CITY ROUTE</text>
-      </g>
+      <rect x="${target.width * 0.58}" y="${target.height * 0.16}" width="${target.width * 0.46}" height="${target.height * 0.55}" rx="92" fill="${panelFill}" opacity="${panelOpacity}" filter="url(#softShadow)" transform="rotate(7 ${target.width * 0.80} ${target.height * 0.44})" />
+      <circle cx="${target.width * 0.18}" cy="${target.height * 0.72}" r="180" fill="${escapeXml(palette.accent)}" opacity="${isDark ? 0.10 : 0.08}" />
+      ${scene.composition === "split-devices" || scene.composition === "cropped-edge-device" ? `<g opacity="0.34"><circle cx="${target.width * 0.78}" cy="${target.height * 0.55}" r="170" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="10"/><circle cx="${target.width * 0.78}" cy="${target.height * 0.55}" r="78" fill="${escapeXml(palette.accent)}" opacity="0.12"/></g>` : ""}
       ${bookStack}
     </g>
   `;
@@ -367,21 +365,29 @@ function renderUtilityDepthLayer(input: RenderSceneSetInput & { scene: Scene }):
 function renderContinuityMotif(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, sceneSet, scene } = input;
   const palette = effectivePaletteFor(sceneSet);
-  const opacity = sceneSet.continuity.sharedBackground === "solid" ? 0.08 : 0.22;
-  const routePath = `M -120 ${target.height * 0.66} C ${target.width * 0.22} ${target.height * 0.44}, ${target.width * 0.58} ${target.height * 0.88}, ${target.width + 120} ${target.height * 0.54}`;
-  const grid = Array.from({ length: 14 }, (_, index) => {
-    const x = index * 120 - 120;
-    return `<path d="M ${x} 320 L ${x + 620} ${target.height - 260}" stroke="${escapeXml(palette.primary)}" stroke-width="2" opacity="0.035"/>`;
-  }).join("");
+  if (sceneSet.continuity.sharedBackground === "solid") return "";
+
+  const setWidth = target.width * Math.max(5, sceneSet.scenes.length);
+  const offsetX = -(scene.index - 1) * target.width;
+  const warmBand = `M ${-target.width * 0.5} ${target.height * 0.74} C ${target.width * 0.7} ${target.height * 0.55}, ${target.width * 1.8} ${target.height * 0.88}, ${target.width * 3.0} ${target.height * 0.62} C ${target.width * 4.2} ${target.height * 0.38}, ${target.width * 4.9} ${target.height * 0.78}, ${target.width * 5.8} ${target.height * 0.52} L ${target.width * 5.8} ${target.height * 1.08} L ${-target.width * 0.5} ${target.height * 1.08} Z`;
+  const softHills = `M ${-target.width * 0.4} ${target.height * 0.48} C ${target.width * 0.9} ${target.height * 0.28}, ${target.width * 1.7} ${target.height * 0.54}, ${target.width * 2.8} ${target.height * 0.34} C ${target.width * 3.8} ${target.height * 0.16}, ${target.width * 4.6} ${target.height * 0.42}, ${target.width * 5.6} ${target.height * 0.24} L ${target.width * 5.6} ${target.height * 0.70} L ${-target.width * 0.4} ${target.height * 0.70} Z`;
+  const accentRibbon = `M ${-target.width * 0.3} ${target.height * 0.60} C ${target.width * 0.9} ${target.height * 0.40}, ${target.width * 1.8} ${target.height * 0.70}, ${target.width * 3.0} ${target.height * 0.48} C ${target.width * 4.1} ${target.height * 0.28}, ${target.width * 4.7} ${target.height * 0.60}, ${target.width * 5.6} ${target.height * 0.40}`;
 
   return `
-    <g opacity="${opacity}">
-      ${grid}
-      <path d="${routePath}" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="14" stroke-linecap="round" stroke-dasharray="28 34" opacity="0.66" />
-      <path d="${routePath}" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity="0.55" />
-      ${sceneSet.continuity.recurringObjects.slice(0, 3).map((object, index) => `<text x="${90 + index * 210}" y="${target.height - 180 - index * 40}" font-family="Arial" font-size="22" font-weight="900" fill="${escapeXml(palette.primary)}" opacity="0.38">${escapeXml(object.toUpperCase())}</text>`).join("")}
-      <text x="86" y="104" font-family="Arial" font-size="26" font-weight="900" fill="${escapeXml(palette.accent)}" letter-spacing="5">${escapeXml(scene.role.toUpperCase())}</text>
+    <g transform="translate(${offsetX} 0)">
+      <linearGradient id="panoramaWash-${scene.index}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.44"/><stop offset="48%" stop-color="${escapeXml(palette.secondary ?? palette.accent)}" stop-opacity="0.16"/><stop offset="100%" stop-color="${escapeXml(palette.accent)}" stop-opacity="0.20"/></linearGradient>
+      <rect x="${-target.width * 0.5}" y="0" width="${setWidth + target.width}" height="${target.height}" fill="url(#panoramaWash-${scene.index})" opacity="0.92" />
+      <path d="${softHills}" fill="${escapeXml(palette.secondary ?? palette.accent)}" opacity="0.42" filter="url(#premiumBlur)" />
+      <path d="${warmBand}" fill="${escapeXml(palette.accent)}" opacity="0.26" filter="url(#premiumBlur)" />
+      <path d="${accentRibbon}" fill="none" stroke="${escapeXml(palette.accent)}" stroke-width="26" stroke-linecap="round" opacity="0.28" filter="url(#premiumBlur)" />
+      <path d="${accentRibbon}" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity="0.38" />
+      ${Array.from({ length: 11 }, (_, index) => {
+        const x = target.width * (0.45 + index * 0.52);
+        const y = target.height * (0.18 + (index % 4) * 0.13);
+        return `<circle cx="${x}" cy="${y}" r="${130 + (index % 3) * 62}" fill="#fff" opacity="0.14" filter="url(#premiumBlur)" />`;
+      }).join("")}
     </g>
+    <text x="86" y="${target.height - 76}" font-family="Arial" font-size="22" font-weight="900" fill="${escapeXml(palette.accent)}" letter-spacing="5" opacity="0.42">${escapeXml(scene.role.toUpperCase())}</text>
   `;
 }
 
@@ -411,17 +417,23 @@ function renderHeadline(input: RenderSceneSetInput & { scene: Scene }): string {
   const palette = effectivePaletteFor(sceneSet);
   const isDark = scene.background.kind === "dark-stage";
   const fill = isDark ? "#FFFFFF" : palette.text;
-  const x = scene.composition === "proof-poster" ? 100 : 86;
-  const y = scene.composition === "proof-poster" ? 220 : 188;
-  const size = scene.composition === "proof-poster" ? 92 : 104;
-  const lines = wrapWords(scene.copy.headline, scene.composition === "split-devices" ? 14 : 16).slice(0, 4);
-  const subY = y + lines.length * (size + 4) + 32;
+  const x = scene.composition === "proof-poster" ? 96 : 86;
+  const y = scene.composition === "proof-poster" ? 176 : 148;
+  const words = scene.copy.headline.split(/\s+/).filter(Boolean);
+  const action = words[0]?.toUpperCase() ?? scene.copy.headline.toUpperCase();
+  const descriptor = words.slice(1).join(" ").toUpperCase();
+  const actionSize = scene.composition === "proof-poster" ? 122 : 132;
+  const descriptorSize = scene.composition === "proof-poster" ? 72 : 78;
+  const descriptorLines = wrapWords(descriptor, scene.composition === "split-devices" ? 14 : 17).slice(0, 3);
+  const descriptorY = y + actionSize - 10;
+  const subY = descriptorY + descriptorLines.length * (descriptorSize + 2) + 34;
 
   return `
-    <text x="${x}" y="${y}" font-family="${escapeXml(sceneSet.brandKit.typography.displayFamily ?? "Inter")}, Arial, sans-serif" font-size="${size}" font-weight="${sceneSet.brandKit.typography.weight}" fill="${escapeXml(fill)}" letter-spacing="-5">
-      ${lines.map((line, index) => `<tspan x="${x}" dy="${index === 0 ? 0 : size + 4}">${escapeXml(line)}</tspan>`).join("")}
+    <text x="${x}" y="${y}" font-family="${escapeXml(sceneSet.brandKit.typography.displayFamily ?? "Inter")}, Arial, sans-serif" font-size="${actionSize}" font-weight="900" fill="${escapeXml(fill)}" letter-spacing="-7">${escapeXml(action)}</text>
+    <text x="${x}" y="${descriptorY}" font-family="${escapeXml(sceneSet.brandKit.typography.displayFamily ?? "Inter")}, Arial, sans-serif" font-size="${descriptorSize}" font-weight="900" fill="${escapeXml(fill)}" letter-spacing="-3.5">
+      ${descriptorLines.map((line, index) => `<tspan x="${x}" dy="${index === 0 ? 0 : descriptorSize + 2}">${escapeXml(line)}</tspan>`).join("")}
     </text>
-    ${scene.copy.subheadline ? `<text x="${x}" y="${subY}" font-family="Arial, sans-serif" font-size="34" fill="${escapeXml(isDark ? "#D8DEE9" : tint(palette.text, 0.35))}">${escapeXml(scene.copy.subheadline)}</text>` : ""}
+    ${scene.copy.subheadline ? `<text x="${x}" y="${subY}" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="${escapeXml(isDark ? "#D8DEE9" : tint(palette.text, 0.35))}">${escapeXml(shorten(scene.copy.subheadline, 74))}</text>` : ""}
   `;
 }
 
@@ -465,8 +477,8 @@ function renderDevice(input: RenderSceneSetInput & { scene: Scene }, device: Loa
 }
 
 function renderSceneObjects(input: RenderSceneSetInput & { scene: Scene }, layer: "behind" | "front"): string {
-  if (layer === "front") return "";
   const objects = input.scene.objects
+    .filter((object) => layer === "front" ? object.depth >= 5 : object.depth < 5)
     .map((object) => renderObject(input, object))
     .join("");
   return `<g>${objects}</g>`;
@@ -532,6 +544,7 @@ function renderCallouts(input: RenderSceneSetInput & { scene: Scene; loadedDevic
 function sceneDefs(_input: RenderSceneSetInput & { scene: Scene }, _frames: DeviceFrame[]): string {
   return `
     <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="30" stdDeviation="30" flood-color="#0f172a" flood-opacity="0.18"/></filter>
+    <filter id="premiumBlur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="34"/></filter>
     <filter id="deviceShadow-1" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0f172a" flood-opacity="0.20"/></filter>
     <filter id="deviceShadow-2" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#0f172a" flood-opacity="0.24"/></filter>
     <filter id="deviceShadow-3" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="38" stdDeviation="36" flood-color="#0f172a" flood-opacity="0.28"/></filter>
@@ -548,8 +561,8 @@ function frameForDevice(target: RenderTarget, composition: Scene["composition"],
   const cx = target.width * device.x;
   const cy = target.height * device.y;
   let x = Math.round(cx - width / 2);
-  if (device.crop === "edge-right") x = Math.round(target.width - width * 0.70);
-  if (device.crop === "edge-left") x = Math.round(-width * 0.30);
+  if (device.crop === "edge-right") x = Math.round(target.width - width * 0.96);
+  if (device.crop === "edge-left") x = Math.round(-width * 0.04);
   const minTop = target.height * (composition === "proof-poster" ? 0.26 : 0.24);
   const maxTop = target.height - height - target.height * 0.045;
   const unclampedY = Math.round(cy - height / 2);
@@ -566,8 +579,8 @@ function frameForDevice(target: RenderTarget, composition: Scene["composition"],
 }
 
 function desiredDeviceHeightRatio(composition: Scene["composition"], device: SceneDevice): number {
-  if (composition === "split-devices" || composition === "before-after") return device.depth >= 5 || device.crop !== "full" ? 0.56 : 0.62;
-  if (composition === "cropped-edge-device") return 0.72;
+  if (composition === "split-devices" || composition === "before-after") return device.depth >= 5 || device.crop !== "full" ? 0.48 : 0.53;
+  if (composition === "cropped-edge-device") return 0.60;
   return 0.70;
 }
 
@@ -591,6 +604,10 @@ function renderPlaceholder(screen: ReturnType<typeof screenRect>, palette: Scene
 
 function svgShell(target: RenderTarget, body: string): string {
   return `<svg width="${target.width}" height="${target.height}" viewBox="0 0 ${target.width} ${target.height}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
+}
+
+function shorten(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
 }
 
 function wrapWords(value: string, maxCharsPerLine: number): string[] {

@@ -33,11 +33,7 @@ export class BuildPremiumSceneSetUseCase {
         },
         devices: selectedScreens.map((screen, deviceIndex) => ({
           screenshotId: screen.screenshotId,
-          x: deviceIndex === 0 ? 0.34 : 0.62,
-          y: 0.48 + deviceIndex * 0.04,
-          scale: deviceIndex === 0 ? 0.72 : 0.58,
-          tilt: deviceIndex === 0 ? -6 : 8,
-          crop: recipeScene.composition === "cropped-edge-device" ? "edge-right" : "full",
+          ...deviceLayoutFor(recipeScene.composition, deviceIndex),
           depth: deviceIndex + 2,
         })),
         objects: recipeScene.requiredAssets
@@ -84,12 +80,12 @@ function selectScreens(product: ProductUnderstanding, role: SceneSet["scenes"][n
 
 function headlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][number]["role"]): string {
   const category = product.category.toLowerCase();
-  if (role === "hook") return product.valueProposition;
+  if (role === "hook") return titleCase(product.valueProposition);
   if (category === "travel") {
-    if (role === "proof") return "Routes readers can trust";
-    if (role === "comparison") return "Compare places, pages, stops";
-    if (role === "cta") return "Start your next literary walk";
-    return "Map every literary stop";
+    if (role === "proof") return "Trusted Literary Routes";
+    if (role === "comparison") return "Compare Places And Pages";
+    if (role === "cta") return "Start Your Next Walk";
+    return "Map Every Literary Stop";
   }
   if (category === "finance") {
     if (role === "proof") return "Security users can see";
@@ -107,6 +103,18 @@ function headlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][num
   if (role === "comparison") return "See the difference instantly";
   if (role === "cta") return "Start with confidence";
   return "Show the core workflow";
+}
+
+function deviceLayoutFor(composition: SceneSet["scenes"][number]["composition"], deviceIndex: number): Omit<SceneSet["scenes"][number]["devices"][number], "screenshotId" | "depth"> {
+  if (composition === "split-devices" || composition === "before-after") {
+    return deviceIndex === 0
+      ? { x: 0.36, y: 0.61, scale: 0.58, tilt: -7, crop: "full" }
+      : { x: 0.68, y: 0.60, scale: 0.50, tilt: 7, crop: "edge-right" };
+  }
+  if (composition === "cropped-edge-device") return { x: 0.70, y: 0.60, scale: 0.64, tilt: 0, crop: "edge-right" };
+  if (composition === "proof-poster") return { x: 0.58, y: 0.64, scale: 0.56, tilt: 4, crop: "full" };
+  if (composition === "object-led") return { x: 0.52, y: 0.61, scale: 0.64, tilt: -6, crop: "full" };
+  return { x: 0.54, y: 0.60, scale: 0.68, tilt: -5, crop: "full" };
 }
 
 function subheadlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][number]["role"]): string {
@@ -134,6 +142,14 @@ function subheadlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][
   if (role === "comparison") return "Show two app moments in one premium frame.";
   if (role === "cta") return "End the set with one clear next step.";
   return "Make the most important feature easy to understand.";
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
 }
 
 function proofBadgeFor(category: string): string {

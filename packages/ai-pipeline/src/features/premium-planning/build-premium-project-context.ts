@@ -1,7 +1,15 @@
-import { BrandKitSchema, ProductUnderstandingSchema, type AppInput, type BrandKit, type ProductUnderstanding } from "@app-screenshot-ai/schemas";
+import { BrandKitSchema, ProductUnderstandingSchema, type AppInput, type BrandKit, type LandingPageContext, type ProductUnderstanding } from "@app-screenshot-ai/schemas";
+
+export type LandingPageLoaderPort = {
+  load(url: string): Promise<string | undefined>;
+};
 
 export type BuildPremiumProjectContextInput = {
   input: AppInput;
+};
+
+export type BuildPremiumProjectContextOptions = {
+  landingPageLoader?: LandingPageLoaderPort;
 };
 
 export type PremiumProjectContext = {
@@ -10,14 +18,22 @@ export type PremiumProjectContext = {
 };
 
 export class BuildPremiumProjectContextUseCase {
+  private readonly landingPageLoader: LandingPageLoaderPort;
+
+  constructor(options: BuildPremiumProjectContextOptions = {}) {
+    this.landingPageLoader = options.landingPageLoader ?? new FetchLandingPageLoader();
+  }
+
   async execute(params: BuildPremiumProjectContextInput): Promise<PremiumProjectContext> {
-    const brandKit = buildBrandKit(params.input);
+    const landingPage = await this.analyzeLandingPage(params.input.brand?.websiteUrl);
+    const brandKit = buildBrandKit(params.input, landingPage);
     const category = canonicalCategory(params.input.category);
     const productUnderstanding = ProductUnderstandingSchema.parse({
       appName: params.input.appName,
       category,
-      valueProposition: params.input.mainValueProposition,
+      valueProposition: landingPage?.headline ?? params.input.mainValueProposition,
       audience: params.input.targetAudience,
+      ...(landingPage ? { landingPage } : {}),
       screenInventory: params.input.screenshots.map((screenshot) => ({
         screenshotId: screenshot.id,
         sourcePath: screenshot.path,
@@ -32,11 +48,45 @@ export class BuildPremiumProjectContextUseCase {
 
     return { brandKit, productUnderstanding };
   }
+
+  private async analyzeLandingPage(url: string | undefined): Promise<LandingPageContext | undefined> {
+    if (!url) return undefined;
+    try {
+      const html = await this.landingPageLoader.load(url);
+      if (!html) return undefined;
+      const context = parseLandingPage(url, html);
+      if (!context.title && !context.description && !context.headline && context.extractedColors.length === 0) return undefined;
+      return context;
+    } catch {
+      return undefined;
+    }
+  }
 }
 
-function buildBrandKit(input: AppInput): BrandKit {
+class FetchLandingPageLoader implements LandingPageLoaderPort {
+  async load(url: string): Promise<string | undefined> {
+    if (typeof fetch !== "function") return undefined;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4_000);
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: { "User-Agent": "AppScreenshotAI/0.1 brand-context" },
+      });
+      if (!response.ok) return undefined;
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType && !contentType.includes("text/html") && !contentType.includes("application/xhtml")) return undefined;
+      return await response.text();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+function buildBrandKit(input: AppInput, landingPage: LandingPageContext | undefined): BrandKit {
   const manualColors = input.brand?.colors?.filter(Boolean) ?? [];
   const defaults = categoryBrandDefaults(canonicalCategory(input.category));
+  const landingColors = landingPage?.extractedColors ?? [];
   const palette = manualColors.length > 0
     ? {
         background: manualColors[0] ?? defaults.palette.background,
@@ -46,15 +96,102 @@ function buildBrandKit(input: AppInput): BrandKit {
         text: defaults.palette.text,
         ...(manualColors[3] ? { secondary: manualColors[3] } : {}),
       }
-    : defaults.palette;
+    : landingColors.length > 0
+      ? {
+          ...defaults.palette,
+          primary: landingColors[0] ?? defaults.palette.primary,
+          accent: landingColors[1] ?? landingColors[0] ?? defaults.palette.accent,
+          ...(landingColors[2] ? { secondary: landingColors[2] } : defaults.palette.secondary ? { secondary: defaults.palette.secondary } : {}),
+        }
+      : defaults.palette;
 
   return BrandKitSchema.parse({
-    source: manualColors.length > 0 ? "manual" : "category-default",
+    source: manualColors.length > 0 ? "manual" : landingPage ? "landing" : "category-default",
     palette,
     typography: defaults.typography,
     imagery: defaults.imagery,
-    tone: defaults.tone,
+    tone: landingPage ? Array.from(new Set([...defaults.tone, "landing-informed"])) : defaults.tone,
   });
+}
+
+function parseLandingPage(url: string, html: string): LandingPageContext {
+  const title = cleanText(matchTag(html, "title"));
+  const description = cleanText(metaContent(html, "description") ?? metaContent(html, "og:description") ?? metaContent(html, "twitter:description"));
+  const headline = cleanText(matchTag(html, "h1") ?? metaContent(html, "og:title") ?? title);
+  const extractedColors = extractColors(html);
+
+  return {
+    url,
+    ...(title ? { title } : {}),
+    ...(description ? { description } : {}),
+    ...(headline ? { headline } : {}),
+    extractedColors,
+  };
+}
+
+function extractColors(html: string): string[] {
+  const colors: string[] = [];
+  const themeColor = metaContent(html, "theme-color");
+  if (themeColor) colors.push(...colorsFromText(themeColor));
+  colors.push(...colorsFromText(html));
+  return Array.from(new Set(colors.map(normalizeHexColor).filter((color): color is string => Boolean(color)))).slice(0, 8);
+}
+
+function colorsFromText(value: string): string[] {
+  return value.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
+}
+
+function normalizeHexColor(value: string): string | undefined {
+  const hex = value.toUpperCase();
+  if (/^#[0-9A-F]{3}$/.test(hex)) {
+    const [, r, g, b] = hex;
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  if (/^#[0-9A-F]{6}$/.test(hex)) return hex;
+  return undefined;
+}
+
+function matchTag(html: string, tag: string): string | undefined {
+  const match = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i").exec(html);
+  return match?.[1];
+}
+
+function metaContent(html: string, nameOrProperty: string): string | undefined {
+  const metas = html.match(/<meta\s+[^>]*>/gi) ?? [];
+  for (const meta of metas) {
+    const attrs = parseAttributes(meta);
+    const key = attrs.name ?? attrs.property;
+    if (key?.toLowerCase() === nameOrProperty.toLowerCase()) return attrs.content;
+  }
+  return undefined;
+}
+
+function parseAttributes(tag: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  for (const match of tag.matchAll(/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
+    const name = match[1]?.toLowerCase();
+    const value = match[3] ?? match[4] ?? match[5] ?? "";
+    if (name) attrs[name] = value;
+  }
+  return attrs;
+}
+
+function cleanText(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const cleaned = decodeHtmlEntities(value.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || undefined;
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replaceAll("&amp;", "&")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&apos;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">");
 }
 
 function inferScreenRole(id: string, path: string): ProductUnderstanding["screenInventory"][number]["role"] {

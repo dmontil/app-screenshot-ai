@@ -37,6 +37,22 @@ describe("AI task contracts", () => {
     expect(contract.schema.safeParse(contract.fixture()).success).toBe(true);
   });
 
+  it("passes landing page context into model tasks so providers can write better copy", () => {
+    const landingPage = {
+      url: "https://routemuse.example",
+      headline: "Walk through the books you love",
+      description: "Discover book locations and turn them into walkable city routes.",
+      extractedColors: ["#123456", "#FF3366"],
+    };
+
+    const visualSystem = visualSystemTaskContract({ app, patterns, landingPage });
+    const storyboard = storyboardTaskContract({ app, patterns, visualSystem: visualSystem.fixture(), landingPage });
+
+    expect(visualSystem.input.landingPage).toEqual(landingPage);
+    expect(storyboard.input.landingPage).toEqual(landingPage);
+    expect(storyboard.input.outputContract.constraints).toContain("Use landingPage headline/description as product context when it is provided, but keep every screenshot headline under 8 words.");
+  });
+
   it("describes the Storyboard generation task with source screenshot constraints", () => {
     const visualSystem = visualSystemTaskContract({ app, patterns }).fixture();
     const contract = storyboardTaskContract({ app, patterns, visualSystem });

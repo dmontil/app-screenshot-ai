@@ -37,7 +37,14 @@ export type GenerationSummary = {
 export type ProjectSummary = {
   projectId: string;
   appName?: string;
+  category?: string;
+  status?: "draft" | "ready" | "blocked" | "exported";
+  createdAt?: string;
+  updatedAt?: string;
   currentGenerationId?: string;
+  favoriteGenerationId?: string;
+  lastExportedAt?: string;
+  thumbnailDataUrl?: string;
   generations: GenerationSummary[];
 };
 

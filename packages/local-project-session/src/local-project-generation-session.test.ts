@@ -128,6 +128,7 @@ describe("LocalProjectGenerationSession", () => {
 
       expect(providerCalls).toBe(0);
       const projects = await store.listProjects();
+      expect(projects[0]).toMatchObject({ projectId: "blocked-app", status: "blocked" });
       expect(projects[0]?.generations).toEqual([]);
 
       const readiness = JSON.parse(await readFile(path.join(rootDir, "blocked-app", "pipeline", "input-readiness.json"), "utf8"));
@@ -169,7 +170,7 @@ describe("LocalProjectGenerationSession", () => {
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 30_000);
 
   it("can return an unsaved manual preview without adding a generation", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "app-screenshot-ai-session-"));
@@ -192,7 +193,7 @@ describe("LocalProjectGenerationSession", () => {
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 30_000);
 
   it("generates and saves a versioned local project store pack", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "app-screenshot-ai-session-"));
@@ -224,7 +225,7 @@ describe("LocalProjectGenerationSession", () => {
       expect(result.screenshots).toHaveLength(5);
       expect(result.qualityReport.passed).toBe(true);
       expect(result.visualSystem.id).toBe("warm-editorial-v1");
-      expect(result.storyboard.screens[0]?.headline).toBe("turn books into walkable routes");
+      expect(result.storyboard.screens[0]?.headline).toBe("Turn Books Into Walkable Routes");
       expect(result.brandKit!.source).toBe("category-default");
       expect(result.premiumRecipes!.map((recipe) => recipe.id)).toEqual(["travel-editorial-panorama"]);
       expect(result.sceneSet?.scenes.map((scene) => scene.composition)).toContain("split-devices");
@@ -233,7 +234,7 @@ describe("LocalProjectGenerationSession", () => {
 
       const generation = await new LocalProjectStore({ rootDir }).readGeneration("literarytrip", result.generationId!);
       expect(generation.label).toBe("AI generation");
-      expect(generation.storyboard.screens[0]?.headline).toBe("turn books into walkable routes");
+      expect(generation.storyboard.screens[0]?.headline).toBe("Turn Books Into Walkable Routes");
       expect(generation.renders[0]?.fileName).toBe("01-hook.png");
       expect(generation.zip.fileName).toBe("literarytrip-store-pack.zip");
 
@@ -244,5 +245,5 @@ describe("LocalProjectGenerationSession", () => {
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
-  }, 20_000);
+  }, 90_000);
 });

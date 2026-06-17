@@ -21,7 +21,7 @@ import {
 } from "@app-screenshot-ai/schemas";
 
 import { CheckInputReadinessUseCase } from "../input-readiness";
-import { BuildPremiumCandidateSceneSetsUseCase, BuildPremiumProjectContextUseCase } from "../premium-planning";
+import { BuildPremiumCandidateSceneSetsUseCase, BuildPremiumProjectContextUseCase, type LandingPageLoaderPort } from "../premium-planning";
 import { storyboardTaskContract, visualSystemTaskContract } from "./ai-task-contracts";
 
 export class GenerateStorePackError extends Error {
@@ -78,17 +78,20 @@ export class GenerateStorePackUseCase {
   private readonly evaluator = new EvaluateStoreSetUseCase();
   private readonly exporter = new ExportStorePackUseCase();
   private readonly sourceScreenshotLoader: SourceScreenshotLoaderPort | undefined;
+  private readonly landingPageLoader: LandingPageLoaderPort | undefined;
 
   constructor(params: {
     modelGateway: ModelGateway;
     patternLibrary: PatternLibrary;
     premiumRecipeLibrary?: PremiumRecipeLibrary;
     sourceScreenshotLoader?: SourceScreenshotLoaderPort;
+    landingPageLoader?: LandingPageLoaderPort;
   }) {
     this.modelGateway = params.modelGateway;
     this.patternLibrary = params.patternLibrary;
     this.premiumRecipeLibrary = params.premiumRecipeLibrary;
     this.sourceScreenshotLoader = params.sourceScreenshotLoader;
+    this.landingPageLoader = params.landingPageLoader;
   }
 
   async execute(params: GenerateStorePackInput): Promise<GenerateStorePackResult> {
@@ -96,7 +99,9 @@ export class GenerateStorePackUseCase {
     if (!readiness.canGenerate) throw new GenerateStorePackError(readiness);
 
     const patterns = this.patternLibrary.retrieve({ category: params.input.category, tone: [] });
-    const premiumContext = await new BuildPremiumProjectContextUseCase().execute({ input: params.input });
+    const premiumContext = await new BuildPremiumProjectContextUseCase({
+      ...(this.landingPageLoader ? { landingPageLoader: this.landingPageLoader } : {}),
+    }).execute({ input: params.input });
     const premiumRecipes = this.premiumRecipeLibrary?.retrieve({
       category: params.input.category,
       tone: premiumContext.brandKit.tone,
@@ -116,7 +121,11 @@ export class GenerateStorePackUseCase {
       : [];
     const sceneSet = selectBestPremiumCandidate(premiumCandidates)?.sceneSet;
 
-    const visualSystemContract = visualSystemTaskContract({ app: params.input, patterns });
+    const visualSystemContract = visualSystemTaskContract({
+      app: params.input,
+      patterns,
+      ...(premiumContext.productUnderstanding.landingPage ? { landingPage: premiumContext.productUnderstanding.landingPage } : {}),
+    });
     const visualSystemResult = await this.modelGateway.generateObject({
       provider: params.provider,
       model: params.model,
@@ -125,7 +134,12 @@ export class GenerateStorePackUseCase {
       input: visualSystemContract.input,
     });
 
-    const storyboardContract = storyboardTaskContract({ app: params.input, patterns, visualSystem: visualSystemResult.object });
+    const storyboardContract = storyboardTaskContract({
+      app: params.input,
+      patterns,
+      visualSystem: visualSystemResult.object,
+      ...(premiumContext.productUnderstanding.landingPage ? { landingPage: premiumContext.productUnderstanding.landingPage } : {}),
+    });
     const storyboardResult = await this.modelGateway.generateObject({
       provider: params.provider,
       model: params.model,

@@ -4,13 +4,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   AdvancedInspector,
+  AppBar,
   CreationStepper,
   ManualCopyEditor,
+  PipelineStatus,
   PreviewGallery,
   ProjectSwitcher,
   QualityExport,
   StatusBanner,
   StudioHero,
+  StudioTopBar,
 } from "./screenshot-studio/components";
 import { fetchProjectGeneration, fetchProjects, fetchProviderSettings, generateStorePack, rerenderStorePack } from "./screenshot-studio/api-client";
 import type { EditableStoryboard, GenerateResponse, ProjectSummary, TextLayerOverride } from "./screenshot-studio/types";
@@ -35,6 +38,8 @@ export default function HomePage() {
   const [activeLocale, setActiveLocale] = useState("en-US");
   const [translationStatus, setTranslationStatus] = useState("");
   const [hasUnsavedPreview, setHasUnsavedPreview] = useState(false);
+  const [prefillMode, setPrefillMode] = useState<"blank" | "demo">("blank");
+  const [formVersion, setFormVersion] = useState(0);
   const lastRenderedStoryboardJsonRef = useRef("");
   const autoRerenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -206,6 +211,14 @@ export default function HomePage() {
     })));
   }
 
+  function resetCreateForm(mode: "blank" | "demo") {
+    screenshotPreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    setScreenshotPreviews([]);
+    setFileCount(0);
+    setPrefillMode(mode);
+    setFormVersion((current) => current + 1);
+  }
+
   function translateCopyForActiveLocale() {
     if (!editableStoryboard) return;
     if (activeLocale === "en-US") {
@@ -280,9 +293,22 @@ export default function HomePage() {
     });
   }
 
+  const selectedProject = projects.find((project) => project.projectId === selectedProjectId);
+
   return (
-    <main className="studio-main">
+    <main className="studio-main" id="top">
+      <AppBar result={result} selectedProject={selectedProject} hasUnsavedPreview={hasUnsavedPreview} />
       <StudioHero />
+
+      <StudioTopBar
+        result={result}
+        selectedProject={selectedProject}
+        selectedGenerationId={selectedGenerationId}
+        hasUnsavedPreview={hasUnsavedPreview}
+        rerendering={rerendering}
+        autoRerender={autoRerender}
+        onDownload={saveVersionAndDownload}
+      />
 
       <ProjectSwitcher
         projects={projects}
@@ -295,7 +321,7 @@ export default function HomePage() {
         onRefresh={refreshProjects}
       />
 
-      <form onSubmit={onSubmit}>
+      <form key={`${prefillMode}-${formVersion}`} onSubmit={onSubmit}>
         <CreationStepper
           provider={provider}
           model={model}
@@ -308,6 +334,9 @@ export default function HomePage() {
           loading={loading}
           fileCount={fileCount}
           screenshotPreviews={screenshotPreviews}
+          prefillMode={prefillMode}
+          onUseDemoProject={() => resetCreateForm("demo")}
+          onStartBlankProject={() => resetCreateForm("blank")}
           onScreenshotsChange={updateScreenshotPreviews}
         />
       </form>
@@ -315,6 +344,7 @@ export default function HomePage() {
       {error && <StatusBanner kind="error">{error}</StatusBanner>}
       {result && <StatusBanner kind="success">Generated {result.screenshots.length} screenshots with {result.provider}/{result.model}. Local path: {result.localProjectPath}</StatusBanner>}
 
+      <PipelineStatus loading={loading} result={result} />
       <PreviewGallery result={result} storyboard={editableStoryboard} loading={loading} />
 
       <ManualCopyEditor

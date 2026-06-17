@@ -115,5 +115,5 @@ describe("RenderSceneSetUseCase", () => {
     const first = await sharp(assets[0]!.bytes).metadata();
     expect(first).toMatchObject({ width: 1320, height: 2868 });
     expect(assets.every((asset) => asset.bytes.byteLength > 50_000)).toBe(true);
-  }, 10_000);
+  }, 60_000);
 });

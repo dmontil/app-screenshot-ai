@@ -117,11 +117,21 @@ export const ScreenshotAnalysisSchema = z.object({
 });
 export type ScreenshotAnalysis = z.infer<typeof ScreenshotAnalysisSchema>;
 
+export const LandingPageContextSchema = z.object({
+  url: z.string().url(),
+  title: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  headline: z.string().min(1).optional(),
+  extractedColors: z.array(z.string().min(1)).default([]),
+});
+export type LandingPageContext = z.infer<typeof LandingPageContextSchema>;
+
 export const ProductUnderstandingSchema = z.object({
   appName: z.string().min(1),
   category: z.string().min(1),
   valueProposition: z.string().min(1),
   audience: z.string().min(1),
+  landingPage: LandingPageContextSchema.optional(),
   screenInventory: z.array(ScreenshotAnalysisSchema),
 });
 export type ProductUnderstanding = z.infer<typeof ProductUnderstandingSchema>;
@@ -383,6 +393,10 @@ export const QualityReportSchema = z.object({
     objectDepth: z.number().min(0).max(1),
     deviceRichness: z.number().min(0).max(1),
     continuity: z.number().min(0).max(1),
+    benefitClarity: z.number().min(0).max(1).optional(),
+    screenshotPairing: z.number().min(0).max(1).optional(),
+    proofSignal: z.number().min(0).max(1).optional(),
+    thumbnailReadability: z.number().min(0).max(1).optional(),
   }).optional(),
   issues: z.array(QualityIssueSchema),
 });

@@ -34,6 +34,9 @@ type CreationStepperProps = ProviderSettingsProps & {
   loading: boolean;
   fileCount: number;
   screenshotPreviews: ScreenshotPreview[];
+  prefillMode: "blank" | "demo";
+  onUseDemoProject: () => void;
+  onStartBlankProject: () => void;
   onScreenshotsChange: (files: FileList | null) => void;
 };
 
@@ -64,6 +67,50 @@ type QualityExportProps = {
   onDownload: () => void;
 };
 
+type StudioTopBarProps = {
+  result: GenerateResponse | null;
+  selectedProject: ProjectSummary | undefined;
+  selectedGenerationId: string;
+  hasUnsavedPreview: boolean;
+  rerendering: boolean;
+  autoRerender: boolean;
+  onDownload: () => void;
+};
+
+type AppBarProps = {
+  result: GenerateResponse | null;
+  selectedProject: ProjectSummary | undefined;
+  hasUnsavedPreview: boolean;
+};
+
+export function AppBar({ result, selectedProject, hasUnsavedPreview }: AppBarProps) {
+  const projectLabel = result?.projectId ?? selectedProject?.appName ?? selectedProject?.projectId ?? "No project";
+  const navItems = [
+    { href: "#projects", label: "Projects" },
+    { href: "#create", label: "Create" },
+    { href: "#pipeline", label: "Pipeline" },
+    { href: "#preview", label: "Preview" },
+    { href: "#editor", label: "Editor" },
+    { href: "#export", label: "Export" },
+    { href: "#inspector", label: "Inspector" },
+  ];
+
+  return (
+    <header className="appbar">
+      <a className="appbar-brand" href="#top" aria-label="Go to top">
+        <span className="brand-mark">AI</span>
+        <span><b>Screenshot Studio</b><small>{projectLabel}</small></span>
+      </a>
+      <nav className="appbar-nav" aria-label="Studio navigation">
+        {navItems.map((item) => <a href={item.href} key={item.href}>{item.label}</a>)}
+      </nav>
+      <div className="appbar-status">
+        <span className={hasUnsavedPreview ? "status-pill warning" : "status-pill"}>{hasUnsavedPreview ? "Unsaved" : result ? "Saved" : "Idle"}</span>
+      </div>
+    </header>
+  );
+}
+
 export function StudioHero() {
   return (
     <section className="studio-hero">
@@ -74,8 +121,8 @@ export function StudioHero() {
           Upload raw app screens, generate a coherent five-screen store set, edit the copy visually, and download a ZIP — all from a local-first Screenshot Studio.
         </p>
         <div className="hero-actions">
-          <a className="button primary" href="#create">Start with fixture demo</a>
-          <a className="button secondary" href="#projects">Load saved project</a>
+          <a className="button primary" href="#create">Start project</a>
+          <a className="button secondary" href="#projects">Open saved project</a>
         </div>
       </div>
       <div className="hero-preview" aria-label="Example generated store screenshot set">
@@ -102,17 +149,37 @@ export function ProjectSwitcher(props: ProjectSwitcherProps) {
 
   return (
     <section className="panel project-switcher" id="projects">
-      <SectionHeader eyebrow="Project history" title="Saved projects & A/B versions" description="Load a previous generation when you want to continue editing or compare manual rerenders." />
-      <div className="grid two">
-        <Field label="Project">
-          <select value={props.selectedProjectId} onChange={(event) => props.onProjectChange(event.target.value)}>
-            <option value="">Choose a saved project</option>
-            {props.projects.map((project) => (
-              <option value={project.projectId} key={project.projectId}>{project.appName ? `${project.appName} — ` : ""}{project.projectId}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Generation">
+      <SectionHeader eyebrow="Projects" title="Continue a project or open a saved version" description="Projects are the workspace. Each project keeps source inputs, AI generations, manual rerenders, quality reports, and ZIP exports." />
+      {props.projects.length === 0 ? (
+        <div className="empty-projects">
+          <b>No projects yet.</b>
+          <p>Start a blank project or use the demo flow below to create your first local workspace.</p>
+        </div>
+      ) : (
+        <div className="project-card-grid">
+          {props.projects.slice(0, 6).map((project) => {
+            const isSelected = project.projectId === props.selectedProjectId;
+            return (
+              <button type="button" className={`project-card ${isSelected ? "selected" : ""}`} key={project.projectId} onClick={() => {
+                props.onProjectChange(project.projectId);
+                props.onGenerationChange(project.currentGenerationId ?? project.generations[0]?.generationId ?? "");
+              }}>
+                <span className="project-thumb" aria-hidden="true">
+                  {project.thumbnailDataUrl ? <img src={project.thumbnailDataUrl} alt="" /> : <span className="project-thumb-empty">No preview</span>}
+                </span>
+                <span className="project-card-body">
+                  <span className={`project-status ${project.status ?? "draft"}`}>{project.status ?? "draft"}</span>
+                  <b>{project.appName ?? project.projectId}</b>
+                  <small>{project.category ?? "uncategorized"} · {project.generations.length} version{project.generations.length === 1 ? "" : "s"}</small>
+                  <small>Updated {formatProjectDate(project.updatedAt)}</small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="grid two project-load-row">
+        <Field label="Selected version">
           <select value={props.selectedGenerationId} onChange={(event) => props.onGenerationChange(event.target.value)} disabled={!selectedProject}>
             <option value="">Choose a generation</option>
             {selectedProject?.generations.map((generation) => (
@@ -122,19 +189,58 @@ export function ProjectSwitcher(props: ProjectSwitcherProps) {
             ))}
           </select>
         </Field>
+        <div className="actions align-end">
+          <button type="button" className="button primary" disabled={!props.selectedProjectId || !props.selectedGenerationId || props.loadingGeneration} onClick={props.onLoad}>{props.loadingGeneration ? "Opening..." : "Open in studio"}</button>
+          <button type="button" className="button secondary" onClick={props.onRefresh}>Refresh</button>
+        </div>
       </div>
-      <div className="actions">
-        <button type="button" className="button primary" disabled={!props.selectedProjectId || !props.selectedGenerationId || props.loadingGeneration} onClick={props.onLoad}>{props.loadingGeneration ? "Loading generation..." : "Load for editing"}</button>
-        <button type="button" className="button secondary" onClick={props.onRefresh}>Refresh projects</button>
+    </section>
+  );
+}
+
+export function StudioTopBar(props: StudioTopBarProps) {
+  const projectName = props.result?.projectId ?? props.selectedProject?.appName ?? props.selectedProject?.projectId ?? "No project open";
+  const status = props.rerendering ? "Rendering preview" : props.hasUnsavedPreview ? "Unsaved preview" : props.result ? "Saved version" : "Ready";
+  return (
+    <section className="studio-topbar" aria-label="Current project status">
+      <div>
+        <small>Current workspace</small>
+        <b>{projectName}</b>
+      </div>
+      <div className="topbar-meta">
+        <span>{status}</span>
+        <span>Auto-preview {props.autoRerender ? "on" : "off"}</span>
+        {props.result?.generationId && <span>{props.result.generationId}</span>}
+      </div>
+      <button type="button" className="button primary" disabled={!props.result || props.rerendering} onClick={props.onDownload}>Export current ZIP</button>
+    </section>
+  );
+}
+
+export function PipelineStatus({ loading, result }: { loading: boolean; result: GenerateResponse | null }) {
+  const steps = ["Checking inputs", "Understanding app", "Creating visual system", "Building storyboard", "Rendering screenshots", "Evaluating quality", "Creating ZIP"];
+  return (
+    <section className="panel pipeline-panel" id="pipeline">
+      <SectionHeader eyebrow="Pipeline" title="Generation progress" description="Follow the local-first pipeline from readiness check to export package." />
+      <div className="pipeline-steps">
+        {steps.map((step, index) => {
+          const state = result ? "done" : loading && index < 3 ? "active" : "pending";
+          return <div className={`pipeline-step ${state}`} key={step}><strong>{index + 1}</strong><span>{step}</span></div>;
+        })}
       </div>
     </section>
   );
 }
 
 export function CreationStepper(props: CreationStepperProps) {
+  const demo = props.prefillMode === "demo";
   return (
     <section className="panel create-panel" id="create">
-      <SectionHeader eyebrow="New project" title="Upload, describe, generate" description="A guided path for the required AppInput: raw screenshots, audience, value proposition, brand hints, and target locale." />
+      <SectionHeader eyebrow="New project" title="Upload, describe, generate" description="Start blank for a real app, or load the LiteraryTrip demo copy explicitly when you want a fixture-backed smoke test." />
+      <div className="template-switcher" aria-label="Project starter">
+        <button type="button" className={demo ? "button secondary selected" : "button secondary"} onClick={props.onUseDemoProject}>Use LiteraryTrip demo copy</button>
+        <button type="button" className={!demo ? "button secondary selected" : "button secondary"} onClick={props.onStartBlankProject}>Start blank project</button>
+      </div>
       <div className="stepper" aria-label="Creation steps">
         <Step active label="1" title="Upload" detail="3–8 app screens" />
         <Step active label="2" title="Brand" detail="Audience + value" />
@@ -184,15 +290,15 @@ export function CreationStepper(props: CreationStepperProps) {
           <p>Keep it short. The pipeline uses these fields to create the creative brief, VisualSystem, and storyboard.</p>
         </div>
         <div className="grid two">
-          <Field label="Project ID"><input name="projectId" placeholder="literarytrip" defaultValue="ui-test-project" /></Field>
+          <Field label="Project ID"><input name="projectId" placeholder="literarytrip" defaultValue={demo ? "literarytrip-demo" : ""} /></Field>
           <Field label="Generation label"><input name="generationLabel" placeholder="A/B label" defaultValue="AI generation" /></Field>
-          <Field label="App name"><input name="appName" required defaultValue="LiteraryTrip" /></Field>
-          <Field label="Category"><select name="category" defaultValue="travel">{categories.map((category) => <option value={category} key={category}>{category}</option>)}</select></Field>
+          <Field label="App name"><input name="appName" required placeholder="Your app name" defaultValue={demo ? "LiteraryTrip" : ""} /></Field>
+          <Field label="Category"><select name="category" defaultValue={demo ? "travel" : "utility"}>{categories.map((category) => <option value={category} key={category}>{category}</option>)}</select></Field>
           <Field label="Base locale"><input name="baseLocale" required defaultValue="en-US" /></Field>
-          <Field label="Target audience"><input name="targetAudience" required defaultValue="readers who travel" /></Field>
-          <Field label="Main value proposition"><input name="mainValueProposition" required defaultValue="turn books into walkable routes" /></Field>
-          <Field label="Brand colors"><input name="brandColors" defaultValue="#F7F1E7, #3B2416, #D99A32" /></Field>
-          <Field label="Website URL"><input name="websiteUrl" placeholder="https://example.com" /></Field>
+          <Field label="Target audience"><input name="targetAudience" required placeholder="e.g. indie readers who travel" defaultValue={demo ? "readers who travel" : ""} /></Field>
+          <Field label="Main value proposition"><input name="mainValueProposition" required placeholder="the main reason people install it" defaultValue={demo ? "turn books into walkable routes" : ""} /></Field>
+          <Field label="Brand colors"><input name="brandColors" placeholder="#111111, #ffffff, #ff8a3d" defaultValue={demo ? "#F7F1E7, #3B2416, #D99A32" : ""} /></Field>
+          <Field label="Website URL"><input name="websiteUrl" placeholder="https://example.com" /><small>Optional: extracts landing page colors, title, description, and H1 when reachable.</small></Field>
         </div>
       </div>
 
@@ -292,7 +398,7 @@ export function ManualCopyEditor(props: ManualCopyEditorProps) {
   if (!props.storyboard) return null;
 
   return (
-    <section className="panel editor-panel">
+    <section className="panel editor-panel" id="editor">
       <SectionHeader eyebrow="Editor" title="Fine-tune copy and layout" description="Edit the AI draft without calling the model again. Auto-preview rerenders PNGs locally after a short delay." />
       <div className="translation-panel">
         <div>
@@ -364,7 +470,7 @@ export function QualityExport({ result, rerendering, onDownload }: QualityExport
   ];
 
   return (
-    <section className="panel export-panel">
+    <section className="panel export-panel" id="export">
       <SectionHeader eyebrow="Export" title="Ready to download" description="Download saves the current preview as an A/B version first when needed, then exports the ZIP." />
       <div className="quality-list">
         {checks.slice(0, 6).map((check, index) => (
@@ -384,7 +490,7 @@ export function QualityExport({ result, rerendering, onDownload }: QualityExport
 
 export function AdvancedInspector({ result, storyboard }: { result: GenerateResponse | null; storyboard: EditableStoryboard | null }) {
   return (
-    <section className="panel advanced-inspector">
+    <section className="panel advanced-inspector" id="inspector">
       <details>
         <summary>Advanced developer inspector</summary>
         {!result ? <p>No generation loaded yet.</p> : (
@@ -420,6 +526,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function formatFileSize(size: number) {
   if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatProjectDate(value: string | undefined) {
+  if (!value) return "unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function Step({ active, label, title, detail }: { active?: boolean; label: string; title: string; detail: string }) {

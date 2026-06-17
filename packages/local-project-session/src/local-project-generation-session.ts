@@ -240,6 +240,9 @@ export class LocalProjectGenerationSession {
   }
 
   private async writeBlockedReadiness(projectId: string, readiness: InputReadinessReport): Promise<void> {
-    await this.store.writeArtifact({ projectId, name: "input-readiness", value: readiness });
+    await Promise.all([
+      this.store.writeArtifact({ projectId, name: "input-readiness", value: readiness }),
+      this.store.updateProjectMetadata({ projectId, patch: { status: "blocked" } }),
+    ]);
   }
 }

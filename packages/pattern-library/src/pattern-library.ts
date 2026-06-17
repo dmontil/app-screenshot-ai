@@ -20,8 +20,8 @@ export function createDefaultPremiumRecipeLibrary(): PremiumRecipeLibrary {
       name: "Editorial route panorama",
       qualityTarget: "top-1-percent",
       tone: ["warm", "editorial", "premium"],
-      scenes: ["hero-poster", "panoramic-sequence", "split-devices", "cropped-edge-device", "object-led"],
-      assets: [["3d-object"], ["gradient", "3d-object"], ["3d-object"], ["gradient"], ["3d-object"]],
+      scenes: ["hero-poster", "panoramic-sequence", "proof-poster", "split-devices", "object-led"],
+      assets: [["3d-object"], ["gradient", "3d-object"], ["badge", "3d-object"], ["gradient"], ["3d-object"]],
     }),
     premiumRecipe({
       id: "utility-blue-depth",
