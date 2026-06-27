@@ -45,17 +45,53 @@ describe("BuildPremiumSceneSetUseCase", () => {
     const sceneSet = new BuildPremiumSceneSetUseCase().execute({ brandKit, productUnderstanding, recipe });
 
     expect(sceneSet.recipeId).toBe("utility-blue-depth");
-    expect(sceneSet.scenes).toHaveLength(5);
+    expect(sceneSet.scenes).toHaveLength(productUnderstanding.screenInventory.length);
     expect(sceneSet.scenes.map((scene) => scene.composition)).toEqual([
       "hero-poster",
       "split-devices",
       "proof-poster",
-      "cropped-edge-device",
-      "object-led",
     ]);
     expect(sceneSet.backgroundPlates?.[0]).toMatchObject({ style: "utility-flow-system", texture: "blueprint" });
     expect(sceneSet.scenes[0]?.background.plateId).toBe(sceneSet.backgroundPlates?.[0]?.id);
     expect(sceneSet.scenes[1]?.devices).toHaveLength(2);
     expect(sceneSet.scenes[0]?.objects[0]).toMatchObject({ kind: "3d-cube", assetId: "utility/cubes-primary" });
+  });
+
+  it("can add one optional cover while still creating one screen per uploaded screenshot", () => {
+    const sceneSet = new BuildPremiumSceneSetUseCase().execute({
+      brandKit,
+      productUnderstanding,
+      recipe,
+      outputScreenCount: productUnderstanding.screenInventory.length + 1,
+      includeCoverScreen: true,
+    });
+
+    expect(sceneSet.scenes).toHaveLength(4);
+    expect(sceneSet.scenes[0]?.role).toBe("hook");
+    expect(sceneSet.scenes[0]?.devices).toEqual([]);
+    expect(sceneSet.scenes.slice(1).map((scene) => scene.devices[0]?.screenshotId)).toEqual(["home", "detail", "map"]);
+  });
+
+  it("keeps camper-van travel copy and objects app-specific instead of literary", () => {
+    const sceneSet = new BuildPremiumSceneSetUseCase().execute({
+      brandKit: {
+        ...brandKit,
+        imagery: { style: "3d", keywords: ["camper-van", "routes", "places"] },
+      },
+      productUnderstanding: {
+        ...productUnderstanding,
+        appName: "Vantrip APP",
+        category: "travel",
+        valueProposition: "Create routes for camper van with IA",
+        audience: "travelers with camper van",
+      },
+      recipe: { ...recipe, id: "travel-editorial-panorama", category: "travel" },
+    });
+
+    const serialized = JSON.stringify(sceneSet).toLowerCase();
+    expect(serialized).not.toContain("literary");
+    expect(serialized).not.toContain("book");
+    expect(sceneSet.scenes.map((scene) => scene.copy.headline)).toContain("Map Every Camper Stop");
+    expect(sceneSet.scenes.flatMap((scene) => scene.objects).map((object) => object.kind)).toContain("map-pin");
   });
 });

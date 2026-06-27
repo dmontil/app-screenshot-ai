@@ -13,6 +13,8 @@ export type BuildPremiumCandidateSceneSetsInput = {
   brandKit: BrandKit;
   productUnderstanding: ProductUnderstanding;
   recipe: PremiumRecipe;
+  outputScreenCount?: number;
+  includeCoverScreen?: boolean;
 };
 
 export class BuildPremiumCandidateSceneSetsUseCase {
@@ -152,13 +154,16 @@ function makeDirectorCut(sceneSet: SceneSet): SceneSet {
 }
 
 function decorativeObject(sceneSet: SceneSet, sceneIndex: number, objectIndex: number): SceneObject {
-  const kind = sceneSet.brandKit.imagery.keywords.includes("coins")
+  const keywords = sceneSet.brandKit.imagery.keywords;
+  const kind = keywords.includes("coins")
     ? "coin"
-    : sceneSet.brandKit.imagery.keywords.includes("trophy")
+    : keywords.includes("trophy")
       ? "trophy"
-      : sceneSet.brandKit.imagery.keywords.includes("books")
+      : keywords.includes("books")
         ? "book"
-        : objectIndex === 0 ? "3d-cube" : "card";
+        : keywords.some((keyword) => ["maps", "routes", "places", "camper-van"].includes(keyword))
+          ? "map-pin"
+          : objectIndex === 0 ? "3d-cube" : "card";
   return {
     assetId: `${sceneSet.recipeId}/decor-${sceneIndex + 1}-${objectIndex + 1}`,
     kind,

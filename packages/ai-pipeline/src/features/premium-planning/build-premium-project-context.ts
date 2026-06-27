@@ -109,7 +109,10 @@ function buildBrandKit(input: AppInput, landingPage: LandingPageContext | undefi
     source: manualColors.length > 0 ? "manual" : landingPage ? "landing" : "category-default",
     palette,
     typography: defaults.typography,
-    imagery: defaults.imagery,
+    imagery: {
+      ...defaults.imagery,
+      keywords: deriveImageryKeywords(input, defaults.imagery.keywords),
+    },
     tone: landingPage ? Array.from(new Set([...defaults.tone, "landing-informed"])) : defaults.tone,
   });
 }
@@ -224,6 +227,18 @@ function canonicalCategory(category: string): string {
   return normalized;
 }
 
+function deriveImageryKeywords(input: AppInput, fallback: string[]): string[] {
+  const text = `${input.appName} ${input.category} ${input.targetAudience} ${input.mainValueProposition}`.toLowerCase();
+  const keywords: string[] = [];
+  if (/camper|van|rv|caravan|autocaravana|furgo|furgoneta/.test(text)) keywords.push("camper-van", "routes", "places");
+  if (/map|route|ruta|trip|travel|viaje|city|ciudad|place|lugar/.test(text)) keywords.push("maps", "routes", "places");
+  if (/book|libro|literary|reader|novel/.test(text)) keywords.push("books");
+  if (/friend|social|chat|community/.test(text)) keywords.push("avatars", "social");
+  if (/money|finance|bank|budget/.test(text)) keywords.push("coins", "proof");
+  if (/fitness|workout|run|sport/.test(text)) keywords.push("rings", "trophy", "energy");
+  return Array.from(new Set([...keywords, ...fallback])).slice(0, 5);
+}
+
 function categoryBrandDefaults(category: string): Omit<BrandKit, "source"> {
   const normalizedCategory = category.toLowerCase();
   if (normalizedCategory === "utility") {
@@ -253,7 +268,7 @@ function categoryBrandDefaults(category: string): Omit<BrandKit, "source"> {
   return {
     palette: { background: "#F7F1E7", surface: "#FFFAF2", text: "#24160F", primary: "#3B2416", accent: "#D99A32", secondary: "#E8D7BD" },
     typography: { displayFamily: "Inter", uiFamily: "Inter", weight: 780, mood: "serif-editorial" },
-    imagery: { style: "3d", keywords: ["books", "maps", "routes"] },
+    imagery: { style: "3d", keywords: ["maps", "routes", "places"] },
     tone: ["warm", "editorial", "premium"],
   };
 }

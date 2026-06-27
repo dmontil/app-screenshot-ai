@@ -25,6 +25,16 @@ export async function generateStorePack(formData: FormData) {
   return payload as GenerateResponse;
 }
 
+export async function generateAiImageDirect(formData: FormData) {
+  const response = await fetch("/api/generate-ai-image-direct", { method: "POST", body: formData });
+  const contentType = response.headers.get("content-type") ?? "";
+  const payload = contentType.includes("application/json")
+    ? await response.json() as { image?: { fileName: string; dataUrl: string }; imageUrl?: string; prompt?: string; localProjectPath?: string; trace?: Array<{ at: string; step: string; detail?: string }>; scenePlan?: unknown; error?: string }
+    : { error: await response.text() };
+  if (!response.ok) throw new Error(payload.error ?? `AI Image Direct generation failed (${response.status})`);
+  return payload;
+}
+
 export async function rerenderStorePack(body: unknown) {
   const response = await fetch("/api/rerender", {
     method: "POST",

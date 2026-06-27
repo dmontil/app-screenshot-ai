@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { AppInput, ExportManifest, QualityReport, RenderedAsset, Storyboard, VisualSystem } from "@app-screenshot-ai/schemas";
+import type { AppInput, ExportManifest, QualityReport, RenderedAsset, StandardStyleReference, Storyboard, VisualSystem } from "@app-screenshot-ai/schemas";
 
 export type LocalProjectStoreOptions = {
   rootDir: string;
@@ -51,6 +51,7 @@ export type WriteGenerationParams = {
   exportManifest: ExportManifest;
   zipFileName: string;
   zipBytes: Uint8Array;
+  styleReference?: StandardStyleReference;
 };
 
 export type StoredGeneration = GenerationSummary & {
@@ -60,6 +61,7 @@ export type StoredGeneration = GenerationSummary & {
   exportManifest: ExportManifest;
   renders: Array<{ fileName: string; bytes: Uint8Array }>;
   zip: { fileName: string; bytes: Uint8Array };
+  styleReference?: StandardStyleReference;
 };
 
 export type ProjectStatus = "draft" | "ready" | "blocked" | "exported";
@@ -176,6 +178,7 @@ export class LocalProjectStore {
     await writeJson(path.join(generationDir, "storyboard.json"), params.storyboard);
     await writeJson(path.join(generationDir, "quality-report.json"), params.qualityReport);
     await writeJson(path.join(generationDir, "export-manifest.json"), params.exportManifest);
+    if (params.styleReference) await writeJson(path.join(generationDir, "style-reference.json"), params.styleReference);
     await writeFile(path.join(exportsDir, params.zipFileName), params.zipBytes);
     for (const asset of params.assets) {
       await writeFile(path.join(rendersDir, asset.fileName), asset.bytes);
@@ -207,6 +210,7 @@ export class LocalProjectStore {
     const storyboard = JSON.parse(await readFile(path.join(generationDir, "storyboard.json"), "utf8")) as Storyboard;
     const qualityReport = JSON.parse(await readFile(path.join(generationDir, "quality-report.json"), "utf8")) as QualityReport;
     const exportManifest = JSON.parse(await readFile(path.join(generationDir, "export-manifest.json"), "utf8")) as ExportManifest;
+    const styleReference = await readOptionalJson<StandardStyleReference>(path.join(generationDir, "style-reference.json"));
     const renderFileNames = await readdir(path.join(generationDir, "renders"));
     const renders = await Promise.all(
       renderFileNames.sort().map(async (fileName) => ({
@@ -224,6 +228,7 @@ export class LocalProjectStore {
       exportManifest,
       renders,
       zip: { fileName: zipFileName, bytes: new Uint8Array(await readFile(path.join(generationDir, "exports", zipFileName))) },
+      ...(styleReference ? { styleReference } : {}),
     };
   }
 
@@ -233,6 +238,7 @@ export class LocalProjectStore {
     const storyboard = await readRequiredJson<Storyboard>(path.join(projectDir, "pipeline", "storyboard.json"));
     const qualityReport = await readRequiredJson<QualityReport>(path.join(projectDir, "pipeline", "quality-report.json"));
     const exportManifest = await readRequiredJson<ExportManifest>(path.join(projectDir, "pipeline", "export-manifest.json"));
+    const styleReference = await readOptionalJson<StandardStyleReference>(path.join(projectDir, "pipeline", "style-reference.json"));
     const renderFileNames = await readdir(path.join(projectDir, "renders"));
     const renders = await Promise.all(
       renderFileNames.filter((fileName) => fileName.endsWith(".png")).sort().map(async (fileName) => ({
@@ -254,6 +260,7 @@ export class LocalProjectStore {
       exportManifest,
       renders,
       zip: { fileName: zipFileName, bytes: new Uint8Array(await readFile(path.join(projectDir, "exports", zipFileName))) },
+      ...(styleReference ? { styleReference } : {}),
     };
   }
 

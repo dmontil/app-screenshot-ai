@@ -48,6 +48,27 @@ export type ProjectSummary = {
   generations: GenerationSummary[];
 };
 
+export type StandardStyleReference = {
+  id: string;
+  name: string;
+  path: string;
+  previewPath?: string;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  width: number;
+  height: number;
+  imageBase64?: string;
+};
+
+export type StoredAppInput = {
+  appName: string;
+  category: string;
+  targetAudience: string;
+  mainValueProposition: string;
+  baseLocale: string;
+  screenshots?: Array<{ id: string; path: string; kind?: string }>;
+  brand?: { colors?: string[]; websiteUrl?: string; logoPath?: string };
+};
+
 export type GenerateResponse = {
   projectId: string;
   generationId: string | undefined;
@@ -58,11 +79,19 @@ export type GenerateResponse = {
   visualSystem: unknown;
   storyboard: EditableStoryboard;
   exportManifest: unknown;
+  input?: StoredAppInput;
   brandKit?: unknown;
   productUnderstanding?: unknown;
   premiumRecipes?: unknown;
   premiumCandidates?: unknown;
   sceneSet?: unknown;
+  styleReference?: StandardStyleReference;
   zip: { fileName: string; dataUrl: string };
   localProjectPath: string;
+  generationMode?: "deterministic" | "premium-direct" | "benchmark";
+  premiumDirect?: {
+    selectedCandidateId: string;
+    candidateCount: number;
+    promptVersion: string;
+  };
 };

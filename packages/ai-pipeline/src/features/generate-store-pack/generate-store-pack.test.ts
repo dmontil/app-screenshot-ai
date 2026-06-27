@@ -34,6 +34,16 @@ const storyboard = {
   ],
 };
 
+const styleReference = {
+  id: "premium-dark-01",
+  name: "Premium Dark Reference",
+  path: "standard-style-references/premium-dark-01.jpeg",
+  mimeType: "image/jpeg" as const,
+  width: 1280,
+  height: 720,
+  imageBase64: "base64-reference",
+};
+
 const premiumRecipe: PremiumRecipe = {
   id: "travel-editorial-panorama",
   category: "travel",
@@ -83,6 +93,7 @@ describe("GenerateStorePackUseCase", () => {
       provider: "fake",
       model: "fake-fast",
       target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+      styleReference,
     });
 
     expect(result.readiness.status).toBe("ready");
@@ -120,6 +131,7 @@ describe("GenerateStorePackUseCase", () => {
       // This test verifies premium pipeline selection/plumbing, not final store-resolution raster quality.
       // Keep the render target small so the integration contract stays fast and deterministic.
       target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 390, height: 844 },
+      styleReference,
     });
 
     expect(result.brandKit.source).toBe("category-default");
@@ -138,17 +150,166 @@ describe("GenerateStorePackUseCase", () => {
       "hero-poster",
       "panoramic-sequence",
       "split-devices",
-      "cropped-edge-device",
-      "object-led",
     ]);
-    expect(result.storyboard.screens).toHaveLength(5);
-    expect(result.storyboard.screens[1]).toMatchObject({
-      treatment: "map-route-editorial",
-      sourceScreenshotPath: "input/search.png",
-      secondarySourceScreenshotPath: "input/map.png",
-    });
+    expect(result.storyboard.screens).toHaveLength(appInput.screenshots.length);
+    expect(result.storyboard.screens.map((screen) => screen.sourceScreenshotPath)).toEqual([
+      "input/home.png",
+      "input/search.png",
+      "input/map.png",
+    ]);
     expect(result.qualityReport.premium?.score).toBeGreaterThan(0.8);
   }, 45_000);
+
+  it("uses AI-first OpenAI compositions to produce one output per uploaded screenshot without SceneSet rendering", async () => {
+    const generatedImageBytes = await sharp({
+      create: { width: 900, height: 1600, channels: 4, background: "#2563EB" },
+    }).png().toBuffer();
+    const sourceScreenshotBytes = await sharp({
+      create: { width: 390, height: 844, channels: 4, background: "#FFFFFF" },
+    }).png().toBuffer();
+    const imagePrompts: string[] = [];
+    const loadedPaths: string[] = [];
+    let styleReferenceAnalyzeCalls = 0;
+    const modelGateway = new ModelGateway({
+      providers: {
+        openai: {
+          async generateObject({ task }) {
+            if (task === "style-reference.analyze") {
+              styleReferenceAnalyzeCalls += 1;
+              return {
+                referenceId: styleReference.id,
+                visualSummary: "Bold blue/purple reference with large poster rhythm.",
+                layoutRhythm: ["large top headline", "central phone stage"],
+                typographyStyle: ["bold readable display type"],
+                colorAndLighting: ["electric blue gradients"],
+                compositionRules: ["follow the reference rhythm"],
+                forbiddenCarryovers: ["reference text", "logos"],
+              };
+            }
+            if (task === "visual-system.generate") return visualSystem;
+            if (task === "storyboard.generate") {
+              return {
+                screens: appInput.screenshots.map((screenshot, index) => ({
+                  id: `screen-${index + 1}`,
+                  index: index + 1,
+                  role: "feature",
+                  headline: `Show app screen ${index + 1}`,
+                  sourceScreenshotPath: screenshot.path,
+                })),
+              };
+            }
+            throw new Error(`Unexpected task: ${task}`);
+          },
+          async generateImage({ prompt }) {
+            imagePrompts.push(prompt);
+            return { bytes: new Uint8Array(generatedImageBytes), contentType: "image/png" as const };
+          },
+        },
+      },
+    });
+
+    const useCase = new GenerateStorePackUseCase({
+      modelGateway,
+      patternLibrary: new PatternLibrary([]),
+      premiumRecipeLibrary: new PremiumRecipeLibrary([premiumRecipe]),
+      sourceScreenshotLoader: {
+        async load(sourcePath) {
+          loadedPaths.push(sourcePath);
+          return { bytes: new Uint8Array(sourceScreenshotBytes), contentType: "image/png" };
+        },
+      },
+    });
+
+    const result = await useCase.execute({
+      input: appInput,
+      provider: "openai",
+      model: "gpt-4.1",
+      imageModel: "gpt-image-1",
+      target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 390, height: 844 },
+      styleReference: { ...styleReference, imageBase64: Buffer.from("reference").toString("base64") },
+    });
+
+    expect(result.assets).toHaveLength(appInput.screenshots.length);
+    expect(result.storyboard.screens).toHaveLength(appInput.screenshots.length);
+    expect(result.sceneSet).toBeUndefined();
+    expect(imagePrompts).toHaveLength(appInput.screenshots.length);
+    expect(imagePrompts[0]).toContain("You are an expert App Store marketing art director");
+    expect(imagePrompts[0]).toContain("Visual DNA");
+    expect(imagePrompts[0]).toContain("The attached reference image is the single source of truth for the art direction");
+    expect(imagePrompts[0]).toContain("Do NOT generate:");
+    expect(imagePrompts[0]).toContain("phone mockups");
+    expect(imagePrompts[0]).toContain(appInput.appName);
+    expect(styleReferenceAnalyzeCalls).toBe(0);
+    expect(loadedPaths).toEqual(appInput.screenshots.map((screenshot) => screenshot.path));
+  }, 20_000);
+
+  it("adds one AI-first cover composition when cover is requested", async () => {
+    const generatedImageBytes = await sharp({ create: { width: 900, height: 1600, channels: 4, background: "#0EA5E9" } }).png().toBuffer();
+    const sourceScreenshotBytes = await sharp({ create: { width: 390, height: 844, channels: 4, background: "#FFFFFF" } }).png().toBuffer();
+    const imagePrompts: string[] = [];
+    const loadedPaths: string[] = [];
+    const modelGateway = new ModelGateway({
+      providers: {
+        openai: {
+          async generateObject({ task }) {
+            if (task === "style-reference.analyze") return {
+              referenceId: styleReference.id,
+              visualSummary: "Reference 4 style",
+              layoutRhythm: ["cover plus screenshot cards"],
+              typographyStyle: ["bold"],
+              colorAndLighting: ["blue"],
+              compositionRules: ["preserve rhythm"],
+              forbiddenCarryovers: ["text"],
+            };
+            if (task === "visual-system.generate") return visualSystem;
+            if (task === "storyboard.generate") return {
+              screens: [
+                { id: "cover", index: 1, role: "hook", headline: "Plan Van Trips", sourceScreenshotPath: appInput.screenshots[0]!.path },
+                ...appInput.screenshots.map((screenshot, index) => ({
+                  id: `screen-${index + 1}`,
+                  index: index + 2,
+                  role: "feature",
+                  headline: `Screen ${index + 1}`,
+                  sourceScreenshotPath: screenshot.path,
+                })),
+              ],
+            };
+            throw new Error(`Unexpected task: ${task}`);
+          },
+          async generateImage({ prompt }) {
+            imagePrompts.push(prompt);
+            return { bytes: new Uint8Array(generatedImageBytes), contentType: "image/png" as const };
+          },
+        },
+      },
+    });
+    const useCase = new GenerateStorePackUseCase({
+      modelGateway,
+      patternLibrary: new PatternLibrary([]),
+      premiumRecipeLibrary: new PremiumRecipeLibrary([premiumRecipe]),
+      sourceScreenshotLoader: {
+        async load(sourcePath) {
+          loadedPaths.push(sourcePath);
+          return { bytes: new Uint8Array(sourceScreenshotBytes), contentType: "image/png" };
+        },
+      },
+    });
+
+    const result = await useCase.execute({
+      input: appInput,
+      provider: "openai",
+      model: "gpt-4.1",
+      imageModel: "gpt-image-1",
+      includeCoverScreen: true,
+      target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 390, height: 844 },
+      styleReference: { ...styleReference, imageBase64: Buffer.from("reference").toString("base64") },
+    });
+
+    expect(result.assets).toHaveLength(appInput.screenshots.length + 1);
+    expect(result.assets[0]?.fileName).toBe("01-cover.png");
+    expect(imagePrompts[0]).toContain("cover / portada");
+    expect(loadedPaths).toEqual(appInput.screenshots.map((screenshot) => screenshot.path));
+  }, 20_000);
 
   it("uses website context for model inputs and rendered brand planning", async () => {
     const modelInputs: unknown[] = [];
@@ -180,6 +341,7 @@ describe("GenerateStorePackUseCase", () => {
       provider: "fake",
       model: "fake-fast",
       target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+      styleReference,
     });
 
     expect(result.brandKit).toMatchObject({ source: "landing", palette: { primary: "#123456", accent: "#FF3366" } });
@@ -227,10 +389,25 @@ describe("GenerateStorePackUseCase", () => {
       provider: "fake",
       model: "fake-fast",
       target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+      styleReference,
     });
 
     expect(loadedPaths).toEqual(["input/home.png"]);
   }, 30_000);
+
+  it("requires a standard visual reference before model calls", async () => {
+    const modelGateway = new ModelGateway({ providers: {} });
+    const useCase = new GenerateStorePackUseCase({ modelGateway, patternLibrary: new PatternLibrary([]) });
+
+    await expect(
+      useCase.execute({
+        input: appInput,
+        provider: "fake",
+        model: "fake-fast",
+        target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+      } as any),
+    ).rejects.toThrow("Choose one standard visual reference before generating.");
+  });
 
   it("stops before model calls when input readiness is blocked", async () => {
     const modelGateway = new ModelGateway({ providers: {} });
@@ -239,10 +416,11 @@ describe("GenerateStorePackUseCase", () => {
 
     await expect(
       useCase.execute({
-        input: { ...appInput, screenshots: appInput.screenshots.slice(0, 2) },
+        input: { ...appInput, screenshots: [] },
         provider: "fake",
         model: "fake-fast",
         target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+        styleReference,
       }),
     ).rejects.toMatchObject({
       code: "input_not_ready",

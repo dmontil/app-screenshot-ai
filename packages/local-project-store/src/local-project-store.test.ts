@@ -6,6 +6,16 @@ import { describe, expect, it } from "vitest";
 
 import { LocalProjectStore } from "./local-project-store";
 
+const styleReference = {
+  id: "sc-1",
+  name: "Reference 1",
+  path: "apps/web/public/style-references/sc_1.jpeg",
+  previewPath: "/style-references/sc_1.jpeg",
+  mimeType: "image/jpeg" as const,
+  width: 800,
+  height: 450,
+};
+
 const appInput = {
   appName: "LiteraryTrip",
   category: "travel",
@@ -90,6 +100,7 @@ describe("LocalProjectStore", () => {
         exportManifest: { items: [] },
         zipFileName: "literarytrip-store-pack.zip",
         zipBytes: new Uint8Array([4, 5, 6]),
+        styleReference,
       });
 
       expect(generation).toMatchObject({ generationId: "gen-a", kind: "ai-generate", label: "first variant" });
@@ -111,6 +122,9 @@ describe("LocalProjectStore", () => {
       expect(storedGeneration.storyboard.screens[0]?.headline).toBe("Walk books");
       expect(storedGeneration.renders[0]?.bytes).toEqual(new Uint8Array([1, 2, 3]));
       expect(storedGeneration.zip.bytes).toEqual(new Uint8Array([4, 5, 6]));
+      expect(storedGeneration.styleReference).toMatchObject({ id: "sc-1", name: "Reference 1" });
+      const storedStyleReference = JSON.parse(await readFile(path.join(rootDir, "literarytrip", "generations", "gen-a", "style-reference.json"), "utf8"));
+      expect(storedStyleReference.id).toBe("sc-1");
     });
   });
 

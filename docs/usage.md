@@ -20,10 +20,11 @@ The UI lets you:
 1. choose provider and set API key,
 2. enter project/app metadata,
 3. upload raw screenshots,
-4. generate screenshots,
-5. preview the 5 PNGs,
-6. inspect quality report / VisualSystem / Storyboard,
-7. download the ZIP export.
+4. choose one standard visual reference for the AI to adapt,
+5. generate screenshots,
+6. preview one PNG per uploaded screenshot, optionally plus one cover,
+7. inspect quality report / VisualSystem / Storyboard,
+8. download the ZIP export.
 
 Use `Fixture — no API key` first to verify the flow locally.
 
@@ -139,9 +140,17 @@ OpenAI:
 ```bash
 MODEL_PROVIDER=openai \
 OPENAI_API_KEY=your_key \
-MODEL_NAME=gpt-4.1-mini \
-npm run generate -- --input examples/literarytrip/input/metadata.json --project literarytrip-openai
+MODEL_NAME=gpt-4.1 \
+OPENAI_IMAGE_MODEL=gpt-image-1 \
+npm run generate -- --input examples/literarytrip/input/metadata.json --project literarytrip-openai --style-reference sc-1
 ```
+
+Available standard visual references:
+
+- `sc-1`
+- `sc-2`
+- `sc-3`
+- `sc-4`
 
 ## Quality gates
 

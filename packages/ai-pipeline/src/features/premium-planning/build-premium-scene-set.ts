@@ -6,15 +6,20 @@ export type BuildPremiumSceneSetInput = {
   brandKit: BrandKit;
   productUnderstanding: ProductUnderstanding;
   recipe: PremiumRecipe;
+  outputScreenCount?: number;
+  includeCoverScreen?: boolean;
 };
 
 export class BuildPremiumSceneSetUseCase {
   execute(input: BuildPremiumSceneSetInput): SceneSet {
     const backgroundPlates = new BuildBackgroundPlatesUseCase().execute(input);
-    const scenes = input.recipe.scenes.slice(0, 5).map((recipeScene, index) => {
+    const outputScreenCount = input.outputScreenCount ?? input.productUnderstanding.screenInventory.length;
+    const scenes = Array.from({ length: outputScreenCount }, (_, index) => {
+      const recipeScene = input.recipe.scenes[index % input.recipe.scenes.length]!;
       const plate = backgroundPlates[index % backgroundPlates.length];
-      const role = input.recipe.setRhythm[index] ?? "feature";
-      const selectedScreens = selectScreens(input.productUnderstanding, role, recipeScene.deviceSlots);
+      const role = roleForIndex(index, Boolean(input.includeCoverScreen));
+      const deviceSlots = input.includeCoverScreen && index === 0 ? 0 : recipeScene.deviceSlots;
+      const selectedScreens = selectScreens(input.productUnderstanding, role, deviceSlots, index, Boolean(input.includeCoverScreen));
       return {
         id: `${role}-${index + 1}`,
         index: index + 1,
@@ -68,24 +73,31 @@ export class BuildPremiumSceneSetUseCase {
   }
 }
 
-function selectScreens(product: ProductUnderstanding, role: SceneSet["scenes"][number]["role"], count: number): ProductUnderstanding["screenInventory"] {
+function roleForIndex(index: number, includeCoverScreen: boolean): SceneSet["scenes"][number]["role"] {
+  if (includeCoverScreen && index === 0) return "hook";
+  const roles: Array<SceneSet["scenes"][number]["role"]> = ["feature", "proof", "comparison", "cta"];
+  return roles[(includeCoverScreen ? index - 1 : index) % roles.length] ?? "feature";
+}
+
+function selectScreens(product: ProductUnderstanding, role: SceneSet["scenes"][number]["role"], count: number, sceneIndex: number, includeCoverScreen: boolean): ProductUnderstanding["screenInventory"] {
   const fallback = product.screenInventory;
   const fallbackScreen = fallback[0];
   if (!fallbackScreen) throw new Error("Cannot build a premium scene set without source screenshots.");
 
-  const preferred = product.screenInventory.filter((screen) => screen.bestFor.includes(role));
-  const source = preferred.length > 0 ? preferred : fallback;
-  return Array.from({ length: count }, (_, index) => source[index % source.length] ?? fallbackScreen);
+  const primaryIndex = includeCoverScreen ? Math.max(0, sceneIndex - 1) : sceneIndex;
+  const primary = fallback[primaryIndex % fallback.length] ?? fallbackScreen;
+  if (count === 1) return [primary];
+  return Array.from({ length: count }, (_, index) => fallback[(primaryIndex + index) % fallback.length] ?? fallbackScreen);
 }
 
 function headlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][number]["role"]): string {
   const category = product.category.toLowerCase();
   if (role === "hook") return titleCase(product.valueProposition);
   if (category === "travel") {
-    if (role === "proof") return "Trusted Literary Routes";
-    if (role === "comparison") return "Compare Places And Pages";
-    if (role === "cta") return "Start Your Next Walk";
-    return "Map Every Literary Stop";
+    if (role === "proof") return "Trusted Routes";
+    if (role === "comparison") return "Compare Every Stop";
+    if (role === "cta") return travelCtaFor(product);
+    return travelFeatureFor(product);
   }
   if (category === "finance") {
     if (role === "proof") return "Security users can see";
@@ -121,10 +133,10 @@ function subheadlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][
   const category = product.category.toLowerCase();
   if (role === "hook") return `Built for ${product.audience}.`;
   if (category === "travel") {
-    if (role === "proof") return "Turn destinations, books, and routes into one clear journey.";
+    if (role === "proof") return "Turn destinations, routes, and stops into one clear journey.";
     if (role === "comparison") return "Show discovery and navigation in one premium frame.";
-    if (role === "cta") return "End with a concrete next walk, not a generic CTA.";
-    return "Make the route, map, and book context legible at a glance.";
+    if (role === "cta") return "End with a concrete next trip, not a generic CTA.";
+    return "Make the route, map, and key stops legible at a glance.";
   }
   if (category === "finance") {
     if (role === "proof") return "Use visual trust signals before asking users to act.";
@@ -142,6 +154,19 @@ function subheadlineFor(product: ProductUnderstanding, role: SceneSet["scenes"][
   if (role === "comparison") return "Show two app moments in one premium frame.";
   if (role === "cta") return "End the set with one clear next step.";
   return "Make the most important feature easy to understand.";
+}
+
+function travelFeatureFor(product: ProductUnderstanding): string {
+  const text = `${product.appName} ${product.valueProposition} ${product.audience}`.toLowerCase();
+  if (/camper|van|rv|caravan|autocaravana|furgo|furgoneta/.test(text)) return "Map Every Camper Stop";
+  if (/city|ciudad|place|lugar/.test(text)) return "Map Every Place";
+  return "Map Every Stop";
+}
+
+function travelCtaFor(product: ProductUnderstanding): string {
+  const text = `${product.appName} ${product.valueProposition} ${product.audience}`.toLowerCase();
+  if (/camper|van|rv|caravan|autocaravana|furgo|furgoneta/.test(text)) return "Start Your Next Road Trip";
+  return "Start Your Next Trip";
 }
 
 function titleCase(value: string): string {
@@ -169,7 +194,7 @@ function objectKindFor(category: string, asset: string): SceneSet["scenes"][numb
   if (asset === "badge") return "badge";
   if (category.toLowerCase() === "finance") return "coin";
   if (category.toLowerCase() === "fitness") return "trophy";
-  if (category.toLowerCase() === "travel") return "book";
+  if (category.toLowerCase() === "travel") return "map-pin";
   return "3d-cube";
 }
 

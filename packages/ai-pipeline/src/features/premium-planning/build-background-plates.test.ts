@@ -25,14 +25,14 @@ describe("BuildBackgroundPlatesUseCase", () => {
     const plates = new BuildBackgroundPlatesUseCase().execute({ brandKit, productUnderstanding: product });
 
     expect(plates.map((plate) => plate.style)).toEqual([
-      "literary-map-sketch",
-      "literary-map-sketch",
+      "travel-map-sketch",
+      "travel-map-sketch",
       "abstract-material",
     ]);
     expect(plates[0]).toMatchObject({
       texture: "aged-paper",
       contrast: "low",
-      motifs: ["map-lines", "open-book", "city-sketch"],
+      motifs: ["map-lines", "route-stops", "city-sketch"],
       safeZone: { x: 0.06, y: 0.2, width: 0.62, height: 0.74 },
     });
     expect(plates.every((plate) => plate.safeZone.height >= 0.68)).toBe(true);

@@ -8,3 +8,5 @@ examples/**/output
 examples/**/quality-benchmark
 docs/e2e-results/
 docs/appshot-research/appshot-gallery.png
+# Local Pi runtime state
+.atl/

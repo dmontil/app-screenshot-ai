@@ -5,7 +5,7 @@ import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { ModelGateway } from "@app-screenshot-ai/model-gateway";
 import { createDefaultPremiumRecipeLibrary, PatternLibrary } from "@app-screenshot-ai/pattern-library";
-import { AppInputSchema, type AppInput } from "@app-screenshot-ai/schemas";
+import { AppInputSchema, getStandardStyleReference, type AppInput, type StandardStyleReference } from "@app-screenshot-ai/schemas";
 
 import { writeLiteraryTripSourceScreenshots } from "./literarytrip-fixtures";
 
@@ -20,6 +20,7 @@ async function main() {
 
   const metadata = JSON.parse(await readFile(path.join(exampleDir, "input", "metadata.json"), "utf8")) as unknown;
   const input: AppInput = AppInputSchema.parse(metadata);
+  const styleReference = await loadStyleReference("sc-1");
 
   const session = new LocalProjectGenerationSession({
     store: new LocalProjectStore({ rootDir: path.join(root, ".local", "projects") }),
@@ -43,12 +44,14 @@ async function main() {
     model: "fixture-v1",
     label: "LiteraryTrip demo",
     target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+    styleReference,
   });
 
   await writeJson("visual-system.json", result.visualSystem);
   await writeJson("storyboard.json", result.storyboard);
   await writeJson("quality-report.json", result.qualityReport);
   await writeJson("export-manifest.json", result.exportManifest);
+  await writeJson("style-reference.json", withoutImagePayload(styleReference));
 
   for (const asset of result.screenshots) {
     await writeFile(path.join(outputDir, "screenshots", asset.fileName), asset.bytes);
@@ -57,6 +60,19 @@ async function main() {
   await writeFile(path.join(outputDir, "literarytrip-store-pack.zip"), result.zip.bytes);
 
   console.log(`Generated ${result.screenshots.length} screenshots in ${path.relative(root, outputDir)}`);
+}
+
+function withoutImagePayload(reference: StandardStyleReference): StandardStyleReference {
+  const metadata = { ...reference };
+  delete metadata.imageBase64;
+  return metadata;
+}
+
+async function loadStyleReference(styleReferenceId: string): Promise<StandardStyleReference> {
+  const reference = getStandardStyleReference(styleReferenceId);
+  if (!reference) throw new Error(`Unknown standard style reference '${styleReferenceId}'.`);
+  const bytes = await readFile(path.join(root, reference.path));
+  return { ...reference, imageBase64: Buffer.from(bytes).toString("base64") };
 }
 
 function createLiteraryTripFixtureGateway(): ModelGateway {

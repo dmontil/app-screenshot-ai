@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   AdvancedInspector,
-  AppBar,
+  AiDirectPackPlanner,
+  AiImageDirectPanel,
   CreationStepper,
   ManualCopyEditor,
   PipelineStatus,
@@ -12,18 +13,23 @@ import {
   ProjectSwitcher,
   QualityExport,
   StatusBanner,
-  StudioHero,
-  StudioTopBar,
+  StudioHeader,
+  StudioSidebar,
 } from "./screenshot-studio/components";
-import { fetchProjectGeneration, fetchProjects, fetchProviderSettings, generateStorePack, rerenderStorePack } from "./screenshot-studio/api-client";
-import type { EditableStoryboard, GenerateResponse, ProjectSummary, TextLayerOverride } from "./screenshot-studio/types";
+import { fetchProjectGeneration, fetchProjects, fetchProviderSettings, generateAiImageDirect, generateStorePack, rerenderStorePack } from "./screenshot-studio/api-client";
+import { loadProviderPreferences, mergeProviderSettings, saveProviderPreferences } from "./screenshot-studio/provider-preferences";
+import type { EditableStoryboard, GenerateResponse, ProjectSummary, StoredAppInput, TextLayerOverride } from "./screenshot-studio/types";
 
 export default function HomePage() {
   const [provider, setProvider] = useState("fixture");
   const [model, setModel] = useState("fixture-v1");
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [openaiApiKey, setOpenaiApiKey] = useState("");
+  const [providerSettingsLoaded, setProviderSettingsLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [aiDirectLoading, setAiDirectLoading] = useState(false);
+  const [aiDirectError, setAiDirectError] = useState<string | null>(null);
+  const [aiDirectResult, setAiDirectResult] = useState<{ image?: { fileName: string; dataUrl: string }; imageUrl?: string; prompt?: string; localProjectPath?: string; trace?: Array<{ at: string; step: string; detail?: string }>; scenePlan?: unknown } | null>(null);
   const [loadingGeneration, setLoadingGeneration] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -39,19 +45,12 @@ export default function HomePage() {
   const [translationStatus, setTranslationStatus] = useState("");
   const [hasUnsavedPreview, setHasUnsavedPreview] = useState(false);
   const [prefillMode, setPrefillMode] = useState<"blank" | "demo">("blank");
+  const [loadedInput, setLoadedInput] = useState<StoredAppInput | null>(null);
   const [formVersion, setFormVersion] = useState(0);
+  const [generationMode, setGenerationMode] = useState<"deterministic" | "premium-direct">("deterministic");
+  const [premiumDirectCandidateCount, setPremiumDirectCandidateCount] = useState(1);
   const lastRenderedStoryboardJsonRef = useRef("");
   const autoRerenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const defaultModel = useMemo(() => {
-    if (provider === "gemini") return "gemini-2.5-flash";
-    if (provider === "openai") return "gpt-4.1-mini";
-    return "fixture-v1";
-  }, [provider]);
-
-  useEffect(() => {
-    setModel(defaultModel);
-  }, [defaultModel]);
 
   useEffect(() => {
     void refreshProjects();
@@ -68,16 +67,31 @@ export default function HomePage() {
     fetchProviderSettings()
       .then((settings) => {
         if (cancelled) return;
-        setProvider(settings.provider);
-        setModel(settings.model);
-        setGeminiApiKey(settings.geminiApiKey);
-        setOpenaiApiKey(settings.openaiApiKey);
+        const merged = mergeProviderSettings(settings, loadProviderPreferences(window.localStorage));
+        setProvider(merged.provider);
+        setModel(merged.model);
+        setGeminiApiKey(merged.geminiApiKey);
+        setOpenaiApiKey(merged.openaiApiKey);
+        setProviderSettingsLoaded(true);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (cancelled) return;
+        const stored = loadProviderPreferences(window.localStorage);
+        if (stored.provider) setProvider(stored.provider);
+        if (stored.model) setModel(stored.model);
+        if (stored.geminiApiKey) setGeminiApiKey(stored.geminiApiKey);
+        if (stored.openaiApiKey) setOpenaiApiKey(stored.openaiApiKey);
+        setProviderSettingsLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!providerSettingsLoaded) return;
+    saveProviderPreferences(window.localStorage, { provider, model, geminiApiKey, openaiApiKey });
+  }, [providerSettingsLoaded, provider, model, geminiApiKey, openaiApiKey]);
 
   useEffect(() => {
     if (!autoRerender || !result || !editableStoryboard || rerendering) return;
@@ -111,6 +125,9 @@ export default function HomePage() {
       setHasUnsavedPreview(false);
       setResult({ ...loaded, provider, model });
       setEditableStoryboard(loaded.storyboard);
+      setLoadedInput(loaded.input ?? null);
+      setPrefillMode("blank");
+      setFormVersion((current) => current + 1);
       setError(null);
       scrollToPreview();
     } catch (err) {
@@ -122,6 +139,11 @@ export default function HomePage() {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const modeIssue = generationModeIssueFor({ generationMode, provider, openaiApiKey });
+    if (modeIssue) {
+      setError(modeIssue);
+      return;
+    }
     setLoading(true);
     setError(null);
     setResult(null);
@@ -133,12 +155,27 @@ export default function HomePage() {
       setHasUnsavedPreview(false);
       setResult(generated);
       setEditableStoryboard(generated.storyboard);
+      setLoadedInput(generated.input ?? null);
       await refreshProjects();
       scrollToPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onAiImageDirectSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAiDirectLoading(true);
+    setAiDirectError(null);
+    try {
+      const generated = await generateAiImageDirect(new FormData(event.currentTarget));
+      setAiDirectResult(generated);
+    } catch (err) {
+      setAiDirectError(err instanceof Error ? err.message : "AI Image Direct failed");
+    } finally {
+      setAiDirectLoading(false);
     }
   }
 
@@ -156,6 +193,7 @@ export default function HomePage() {
         storyboard: storyboardToRender,
         label: options.label ?? "Manual rerender",
         persist: options.persist ?? true,
+        styleReference: result.styleReference,
       });
       const nextResult = { ...result, ...payload, provider: result.provider, model: result.model };
       lastRenderedStoryboardJsonRef.current = JSON.stringify(nextResult.storyboard);
@@ -216,7 +254,15 @@ export default function HomePage() {
     setScreenshotPreviews([]);
     setFileCount(0);
     setPrefillMode(mode);
+    setLoadedInput(null);
     setFormVersion((current) => current + 1);
+  }
+
+  function changeProvider(nextProvider: string) {
+    setProvider(nextProvider);
+    if (nextProvider === "gemini") setModel("gemini-2.5-flash");
+    else if (nextProvider === "openai") setModel("gpt-4.1");
+    else setModel("fixture-v1");
   }
 
   function translateCopyForActiveLocale() {
@@ -294,78 +340,102 @@ export default function HomePage() {
   }
 
   const selectedProject = projects.find((project) => project.projectId === selectedProjectId);
+  const generationModeIssue = generationModeIssueFor({ generationMode, provider, openaiApiKey });
 
   return (
-    <main className="studio-main" id="top">
-      <AppBar result={result} selectedProject={selectedProject} hasUnsavedPreview={hasUnsavedPreview} />
-      <StudioHero />
-
-      <StudioTopBar
-        result={result}
-        selectedProject={selectedProject}
-        selectedGenerationId={selectedGenerationId}
-        hasUnsavedPreview={hasUnsavedPreview}
-        rerendering={rerendering}
-        autoRerender={autoRerender}
-        onDownload={saveVersionAndDownload}
-      />
-
-      <ProjectSwitcher
-        projects={projects}
-        selectedProjectId={selectedProjectId}
-        selectedGenerationId={selectedGenerationId}
-        loadingGeneration={loadingGeneration}
-        onProjectChange={(value) => { setSelectedProjectId(value); setSelectedGenerationId(""); }}
-        onGenerationChange={setSelectedGenerationId}
-        onLoad={loadSelectedGeneration}
-        onRefresh={refreshProjects}
-      />
-
-      <form key={`${prefillMode}-${formVersion}`} onSubmit={onSubmit}>
-        <CreationStepper
-          provider={provider}
-          model={model}
-          geminiApiKey={geminiApiKey}
-          openaiApiKey={openaiApiKey}
-          onProviderChange={setProvider}
-          onModelChange={setModel}
-          onGeminiApiKeyChange={setGeminiApiKey}
-          onOpenaiApiKeyChange={setOpenaiApiKey}
-          loading={loading}
-          fileCount={fileCount}
-          screenshotPreviews={screenshotPreviews}
-          prefillMode={prefillMode}
-          onUseDemoProject={() => resetCreateForm("demo")}
-          onStartBlankProject={() => resetCreateForm("blank")}
-          onScreenshotsChange={updateScreenshotPreviews}
+    <main className="studio-shell" id="top">
+      <StudioSidebar result={result} selectedProject={selectedProject} hasUnsavedPreview={hasUnsavedPreview} />
+      <div className="studio-workspace">
+        <StudioHeader
+          result={result}
+          selectedProject={selectedProject}
+          hasUnsavedPreview={hasUnsavedPreview}
+          rerendering={rerendering}
+          autoRerender={autoRerender}
+          onDownload={saveVersionAndDownload}
         />
-      </form>
 
-      {error && <StatusBanner kind="error">{error}</StatusBanner>}
-      {result && <StatusBanner kind="success">Generated {result.screenshots.length} screenshots with {result.provider}/{result.model}. Local path: {result.localProjectPath}</StatusBanner>}
+        <AiDirectPackPlanner />
 
-      <PipelineStatus loading={loading} result={result} />
-      <PreviewGallery result={result} storyboard={editableStoryboard} loading={loading} />
+        <AiImageDirectPanel loading={aiDirectLoading} error={aiDirectError} result={aiDirectResult} onSubmit={onAiImageDirectSubmit} />
 
-      <ManualCopyEditor
-        storyboard={editableStoryboard}
-        rerendering={rerendering}
-        autoRerender={autoRerender}
-        activeLocale={activeLocale}
-        translationStatus={translationStatus}
-        onActiveLocaleChange={(value) => { setActiveLocale(value); setTranslationStatus(""); }}
-        onTranslateCopy={translateCopyForActiveLocale}
-        onAutoRerenderChange={setAutoRerender}
-        onUpdateScreenText={updateScreenText}
-        onUpdateCalloutLabel={updateCalloutLabel}
-        onUpdateTextLayer={updateTextLayer}
-        onSaveVersion={() => { void rerenderWithManualText({ label: "Saved manual version", persist: true }); }}
-      />
+        <details className="legacy-workflow" id="create">
+          <summary>Full screenshot-set workflow</summary>
+          <div className="legacy-workflow-body">
+            <form key={`${prefillMode}-${formVersion}`} onSubmit={onSubmit}>
+              <CreationStepper
+                provider={provider}
+                model={model}
+                geminiApiKey={geminiApiKey}
+                openaiApiKey={openaiApiKey}
+                onProviderChange={changeProvider}
+                onModelChange={setModel}
+                onGeminiApiKeyChange={setGeminiApiKey}
+                onOpenaiApiKeyChange={setOpenaiApiKey}
+                loading={loading}
+                fileCount={fileCount}
+                screenshotPreviews={screenshotPreviews}
+                prefillMode={prefillMode}
+                loadedInput={loadedInput}
+                loadedProjectId={loadedInput ? selectedProjectId : undefined}
+                generationMode={generationMode}
+                premiumDirectCandidateCount={premiumDirectCandidateCount}
+                generationModeIssue={generationModeIssue}
+                onGenerationModeChange={setGenerationMode}
+                onPremiumDirectCandidateCountChange={(value) => setPremiumDirectCandidateCount(Math.max(1, Math.min(3, value || 1)))}
+                onUseDemoProject={() => resetCreateForm("demo")}
+                onStartBlankProject={() => resetCreateForm("blank")}
+                onScreenshotsChange={updateScreenshotPreviews}
+              />
+            </form>
 
-      {result && <QualityExport result={result} rerendering={rerendering} onDownload={saveVersionAndDownload} />}
-      <AdvancedInspector result={result} storyboard={editableStoryboard} />
+            {error && <StatusBanner kind="error">{error}</StatusBanner>}
+            {result && <StatusBanner kind="success">Generated {result.screenshots.length} screenshots with {result.provider}/{result.model}{result.generationMode === "premium-direct" ? ` · Premium Direct (${result.premiumDirect?.candidateCount ?? 1} candidate${result.premiumDirect?.candidateCount === 1 ? "" : "s"})` : ""}. Local path: {result.localProjectPath}</StatusBanner>}
+
+            <ProjectSwitcher
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              selectedGenerationId={selectedGenerationId}
+              loadingGeneration={loadingGeneration}
+              onProjectChange={(value) => { setSelectedProjectId(value); setSelectedGenerationId(""); }}
+              onGenerationChange={setSelectedGenerationId}
+              onLoad={loadSelectedGeneration}
+              onRefresh={refreshProjects}
+            />
+
+            <PreviewGallery result={result} storyboard={editableStoryboard} loading={loading} />
+
+            <ManualCopyEditor
+              storyboard={editableStoryboard}
+              rerendering={rerendering}
+              autoRerender={autoRerender}
+              activeLocale={activeLocale}
+              translationStatus={translationStatus}
+              onActiveLocaleChange={(value) => { setActiveLocale(value); setTranslationStatus(""); }}
+              onTranslateCopy={translateCopyForActiveLocale}
+              onAutoRerenderChange={setAutoRerender}
+              onUpdateScreenText={updateScreenText}
+              onUpdateCalloutLabel={updateCalloutLabel}
+              onUpdateTextLayer={updateTextLayer}
+              onSaveVersion={() => { void rerenderWithManualText({ label: "Saved manual version", persist: true }); }}
+            />
+
+            {result && <QualityExport result={result} rerendering={rerendering} onDownload={saveVersionAndDownload} />}
+            <PipelineStatus loading={loading} result={result} />
+            <AdvancedInspector result={result} storyboard={editableStoryboard} />
+          </div>
+        </details>
+      </div>
     </main>
   );
+}
+
+function generationModeIssueFor(params: { generationMode: "deterministic" | "premium-direct"; provider: string; openaiApiKey: string }): string | undefined {
+  if (params.generationMode !== "premium-direct") return undefined;
+  if (params.provider === "fixture") return undefined;
+  if (params.provider !== "openai") return "Premium Direct needs OpenAI image generation. Switch provider to OpenAI, or use Fixture for a free smoke test.";
+  if (!params.openaiApiKey) return "Premium Direct with OpenAI needs an OpenAI API key. Paste it in Advanced provider settings first.";
+  return undefined;
 }
 
 function translateText(value: string, locale: string): string {

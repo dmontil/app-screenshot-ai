@@ -3,6 +3,117 @@ import { z } from "zod";
 export const StoreTargetSchema = z.enum(["app-store", "google-play"]);
 export type StoreTarget = z.infer<typeof StoreTargetSchema>;
 
+export const AiProviderSchema = z.enum(["gemini", "openai"]);
+export type AiProvider = z.infer<typeof AiProviderSchema>;
+
+export const StandardStyleReferenceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  path: z.string().min(1),
+  previewPath: z.string().min(1).optional(),
+  mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  imageBase64: z.string().min(1).optional(),
+});
+export type StandardStyleReference = z.infer<typeof StandardStyleReferenceSchema>;
+
+export const STANDARD_STYLE_REFERENCES: StandardStyleReference[] = [
+  {
+    id: "sc-1",
+    name: "Reference 1",
+    path: "apps/web/public/style-references/sc_1.jpeg",
+    previewPath: "/style-references/sc_1.jpeg",
+    mimeType: "image/jpeg",
+    width: 800,
+    height: 450,
+  },
+  {
+    id: "sc-2",
+    name: "Reference 2",
+    path: "apps/web/public/style-references/sc_2.jpeg",
+    previewPath: "/style-references/sc_2.jpeg",
+    mimeType: "image/jpeg",
+    width: 800,
+    height: 450,
+  },
+  {
+    id: "sc-3",
+    name: "Reference 3",
+    path: "apps/web/public/style-references/sc_3.jpeg",
+    previewPath: "/style-references/sc_3.jpeg",
+    mimeType: "image/jpeg",
+    width: 800,
+    height: 450,
+  },
+  {
+    id: "sc-4",
+    name: "Reference 4",
+    path: "apps/web/public/style-references/sc_4.jpeg",
+    previewPath: "/style-references/sc_4.jpeg",
+    mimeType: "image/jpeg",
+    width: 800,
+    height: 450,
+  },
+  {
+    id: "sc-5",
+    name: "Reference 5",
+    path: "apps/web/public/style-references/sc_5.png",
+    previewPath: "/style-references/sc_5.png",
+    mimeType: "image/png",
+    width: 2400,
+    height: 1260,
+  },
+  {
+    id: "sc-6",
+    name: "Reference 6",
+    path: "apps/web/public/style-references/sc_6.png",
+    previewPath: "/style-references/sc_6.png",
+    mimeType: "image/png",
+    width: 2400,
+    height: 1260,
+  },
+  {
+    id: "sc-7",
+    name: "Reference 7",
+    path: "apps/web/public/style-references/sc_7.png",
+    previewPath: "/style-references/sc_7.png",
+    mimeType: "image/png",
+    width: 2400,
+    height: 1260,
+  },
+  {
+    id: "sc-8",
+    name: "Reference 8",
+    path: "apps/web/public/style-references/sc_8.png",
+    previewPath: "/style-references/sc_8.png",
+    mimeType: "image/png",
+    width: 2400,
+    height: 1260,
+  },
+];
+
+export function getStandardStyleReference(id: string): StandardStyleReference | undefined {
+  return STANDARD_STYLE_REFERENCES.find((reference) => reference.id === id);
+}
+
+export const StyleReferenceAnalysisSchema = z.object({
+  referenceId: z.string().min(1),
+  visualSummary: z.string().min(1),
+  layoutRhythm: z.array(z.string().min(1)).min(1),
+  typographyStyle: z.array(z.string().min(1)).min(1),
+  colorAndLighting: z.array(z.string().min(1)).min(1),
+  compositionRules: z.array(z.string().min(1)).min(1),
+  forbiddenCarryovers: z.array(z.string().min(1)).min(1),
+});
+export type StyleReferenceAnalysis = z.infer<typeof StyleReferenceAnalysisSchema>;
+
+export const GenerationStyleSelectionSchema = z.object({
+  styleReferenceId: z.string().min(1),
+  aiProvider: AiProviderSchema,
+});
+export type GenerationStyleSelection = z.infer<typeof GenerationStyleSelectionSchema>;
+
 export const ScreenshotKindSchema = z.enum(["functional", "splash", "logo", "empty", "unknown"]);
 export type ScreenshotKind = z.infer<typeof ScreenshotKindSchema>;
 
@@ -193,7 +304,7 @@ export type SceneObject = z.infer<typeof SceneObjectSchema>;
 
 export const BackgroundPlateSpecSchema = z.object({
   id: z.string().min(1),
-  style: z.enum(["literary-map-sketch", "utility-flow-system", "finance-ledger-engraving", "fitness-kinetic", "abstract-material"]),
+  style: z.enum(["travel-map-sketch", "utility-flow-system", "finance-ledger-engraving", "fitness-kinetic", "abstract-material"]),
   texture: z.enum(["aged-paper", "soft-noise", "blueprint", "ledger-paper", "dark-grain", "none"]),
   contrast: z.enum(["low", "medium"]),
   motifs: z.array(z.string().min(1)),

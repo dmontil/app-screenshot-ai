@@ -4,7 +4,7 @@ import type { BackgroundPlateSpec, ProductUnderstanding, RenderedAsset, RenderTa
 
 export type RenderSceneSetSource = {
   bytes: Uint8Array;
-  contentType: "image/png" | "image/jpeg";
+  contentType: "image/png" | "image/jpeg" | "image/webp";
 };
 
 export type RenderSceneSetInput = {
@@ -12,6 +12,8 @@ export type RenderSceneSetInput = {
   productUnderstanding: ProductUnderstanding;
   target: RenderTarget;
   loadSourceScreenshot?: (path: string) => Promise<RenderSceneSetSource>;
+  generatedStyleBackground?: RenderSceneSetSource;
+  generatedStyleBackgrounds?: Record<string, RenderSceneSetSource>;
 };
 
 type LoadedDevice = {
@@ -125,6 +127,10 @@ function renderBackground(input: RenderSceneSetInput & { scene: Scene }): string
   const accent = categoryStage.accent;
   const text = categoryStage.text;
 
+  if (styleBackgroundFor(input)) {
+    return renderGeneratedStyleBackground(input);
+  }
+
   const plate = backgroundPlateFor(sceneSet, scene);
   if (plate) {
     return renderPlateBase(input, plate);
@@ -153,6 +159,25 @@ function renderBackground(input: RenderSceneSetInput & { scene: Scene }): string
   `;
 }
 
+function renderGeneratedStyleBackground(input: RenderSceneSetInput & { scene: Scene }): string {
+  const { target, sceneSet } = input;
+  const generatedStyleBackground = styleBackgroundFor(input);
+  if (!generatedStyleBackground) return "";
+  const href = `data:${generatedStyleBackground.contentType};base64,${Buffer.from(generatedStyleBackground.bytes).toString("base64")}`;
+  const palette = effectivePaletteFor(sceneSet);
+  return `
+    <image href="${href}" x="-${target.width * 0.04}" y="-${target.height * 0.04}" width="${target.width * 1.08}" height="${target.height * 1.08}" preserveAspectRatio="xMidYMid slice" filter="url(#aiBackgroundSanitize)" />
+    <linearGradient id="aiBgLegibility" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"/><stop offset="36%" stop-color="#FFFFFF" stop-opacity="0.06"/><stop offset="100%" stop-color="${escapeXml(palette.background)}" stop-opacity="0.16"/></linearGradient>
+    <rect width="100%" height="100%" fill="url(#aiBgLegibility)" />
+  `;
+}
+
+function styleBackgroundFor(input: RenderSceneSetInput & { scene: Scene }): RenderSceneSetSource | undefined {
+  return input.generatedStyleBackgrounds?.[input.scene.id]
+    ?? input.generatedStyleBackgrounds?.[String(input.scene.index)]
+    ?? input.generatedStyleBackground;
+}
+
 function effectivePaletteFor(sceneSet: SceneSet): SceneSet["brandKit"]["palette"] {
   return categoryStagePalette(artDirectionFor(sceneSet), sceneSet.brandKit.palette);
 }
@@ -165,6 +190,7 @@ function categoryStagePalette(artDirection: SceneSetRenderDiagnostics["artDirect
 }
 
 function renderArtDirectionLayer(input: RenderSceneSetInput & { scene: Scene }): string {
+  if (styleBackgroundFor(input)) return "";
   const plate = backgroundPlateFor(input.sceneSet, input.scene);
   if (plate) return renderBackgroundPlate(input, plate);
   const artDirection = artDirectionFor(input.sceneSet);
@@ -194,7 +220,7 @@ function renderPlateBase(input: RenderSceneSetInput & { scene: Scene }, plate: B
 }
 
 function renderBackgroundPlate(input: RenderSceneSetInput & { scene: Scene }, plate: BackgroundPlateSpec): string {
-  if (plate.style === "literary-map-sketch") return renderLiteraryMapPlate(input, plate);
+  if (plate.style === "travel-map-sketch") return renderLiteraryMapPlate(input, plate);
   if (plate.style === "utility-flow-system") return renderUtilityFlowPlate(input, plate);
   if (plate.style === "finance-ledger-engraving") return renderFinanceLedgerPlate(input, plate);
   if (plate.style === "fitness-kinetic") return renderFitnessKineticPlate(input, plate);
@@ -227,8 +253,8 @@ function renderLiteraryMapPlate(input: RenderSceneSetInput & { scene: Scene }, p
         <path d="M-126 88 H154" stroke="${escapeXml(ink)}" stroke-width="3"/>
         <path d="M-86 64 V88 M-30 38 V88 M44 30 V88 M104 48 V88" stroke="${escapeXml(ink)}" stroke-width="3"/>
       </g>
-      <text x="${target.width * 0.63}" y="${target.height * 0.18}" font-family="Georgia, serif" font-size="28" fill="${escapeXml(ink)}" opacity="0.42" font-style="italic">Rutas de Libros</text>
-      <text x="${target.width * 0.65}" y="${target.height * 0.63}" font-family="Georgia, serif" font-size="25" fill="${escapeXml(ink)}" opacity="0.30" font-style="italic">Rutas de Libros</text>
+      <text x="${target.width * 0.63}" y="${target.height * 0.18}" font-family="Georgia, serif" font-size="28" fill="${escapeXml(ink)}" opacity="0.42" font-style="italic">${escapeXml(input.productUnderstanding.appName)}</text>
+      <text x="${target.width * 0.65}" y="${target.height * 0.63}" font-family="Georgia, serif" font-size="25" fill="${escapeXml(ink)}" opacity="0.30" font-style="italic">${escapeXml(input.productUnderstanding.category)}</text>
     </g>
   `;
 }
@@ -363,6 +389,7 @@ function renderUtilityDepthLayer(input: RenderSceneSetInput & { scene: Scene }):
 }
 
 function renderContinuityMotif(input: RenderSceneSetInput & { scene: Scene }): string {
+  if (styleBackgroundFor(input)) return "";
   const { target, sceneSet, scene } = input;
   const palette = effectivePaletteFor(sceneSet);
   if (sceneSet.continuity.sharedBackground === "solid") return "";
@@ -392,6 +419,7 @@ function renderContinuityMotif(input: RenderSceneSetInput & { scene: Scene }): s
 }
 
 function renderCompositionBackdrop(input: RenderSceneSetInput & { scene: Scene }): string {
+  if (styleBackgroundFor(input)) return "";
   const { target, scene, sceneSet } = input;
   const palette = effectivePaletteFor(sceneSet);
   if (scene.composition === "split-devices" || scene.composition === "before-after") {
@@ -428,18 +456,22 @@ function renderHeadline(input: RenderSceneSetInput & { scene: Scene }): string {
   const descriptorY = y + actionSize - 10;
   const subY = descriptorY + descriptorLines.length * (descriptorSize + 2) + 34;
 
+  const stroke = isDark ? "#07101F" : "#FFFFFF";
+  const generatedBackground = Boolean(styleBackgroundFor(input));
+  const scrimHeight = Math.min(target.height * 0.28, subY - y + 72);
   return `
-    <text x="${x}" y="${y}" font-family="${escapeXml(sceneSet.brandKit.typography.displayFamily ?? "Inter")}, Arial, sans-serif" font-size="${actionSize}" font-weight="900" fill="${escapeXml(fill)}" letter-spacing="-7">${escapeXml(action)}</text>
-    <text x="${x}" y="${descriptorY}" font-family="${escapeXml(sceneSet.brandKit.typography.displayFamily ?? "Inter")}, Arial, sans-serif" font-size="${descriptorSize}" font-weight="900" fill="${escapeXml(fill)}" letter-spacing="-3.5">
+    ${generatedBackground ? `<linearGradient id="headlineScrim-${scene.index}" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.78"/><stop offset="72%" stop-color="#FFFFFF" stop-opacity="0.36"/><stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient><rect x="42" y="42" width="${target.width * 0.86}" height="${scrimHeight}" rx="34" fill="url(#headlineScrim-${scene.index})"/>` : ""}
+    <text x="${x}" y="${y}" font-family="${escapeXml(sceneSet.brandKit.typography.displayFamily ?? "Inter")}, Arial, sans-serif" font-size="${actionSize}" font-weight="950" fill="${escapeXml(fill)}" stroke="${escapeXml(stroke)}" stroke-width="10" paint-order="stroke" letter-spacing="-7">${escapeXml(action)}</text>
+    <text x="${x}" y="${descriptorY}" font-family="${escapeXml(sceneSet.brandKit.typography.displayFamily ?? "Inter")}, Arial, sans-serif" font-size="${descriptorSize}" font-weight="950" fill="${escapeXml(fill)}" stroke="${escapeXml(stroke)}" stroke-width="7" paint-order="stroke" letter-spacing="-3.5">
       ${descriptorLines.map((line, index) => `<tspan x="${x}" dy="${index === 0 ? 0 : descriptorSize + 2}">${escapeXml(line)}</tspan>`).join("")}
     </text>
-    ${scene.copy.subheadline ? `<text x="${x}" y="${subY}" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="${escapeXml(isDark ? "#D8DEE9" : tint(palette.text, 0.35))}">${escapeXml(shorten(scene.copy.subheadline, 74))}</text>` : ""}
+    ${scene.copy.subheadline ? `<text x="${x}" y="${subY}" font-family="Arial, sans-serif" font-size="34" font-weight="850" fill="${escapeXml(isDark ? "#FFFFFF" : palette.text)}" stroke="${escapeXml(stroke)}" stroke-width="5" paint-order="stroke">${escapeXml(shorten(scene.copy.subheadline, 68))}</text>` : ""}
   `;
 }
 
 function renderProofPoster(input: RenderSceneSetInput & { scene: Scene }): string {
   const { target, scene, sceneSet } = input;
-  if (scene.composition !== "proof-poster") return "";
+  if (styleBackgroundFor(input) || scene.composition !== "proof-poster") return "";
   const palette = effectivePaletteFor(sceneSet);
   return `
     <g transform="translate(${target.width * 0.12}, ${target.height * 0.43})" filter="url(#softShadow)">
@@ -477,6 +509,7 @@ function renderDevice(input: RenderSceneSetInput & { scene: Scene }, device: Loa
 }
 
 function renderSceneObjects(input: RenderSceneSetInput & { scene: Scene }, layer: "behind" | "front"): string {
+  if (styleBackgroundFor(input)) return "";
   const objects = input.scene.objects
     .filter((object) => layer === "front" ? object.depth >= 5 : object.depth < 5)
     .map((object) => renderObject(input, object))
@@ -507,11 +540,15 @@ function renderObject(input: RenderSceneSetInput & { scene: Scene }, object: Sce
   if (object.kind === "book") {
     return `<g transform="${transform}" filter="url(#softShadow)"><rect x="-132" y="-172" width="264" height="344" rx="34" fill="${escapeXml(palette.primary)}"/><rect x="-102" y="-136" width="204" height="272" rx="24" fill="${escapeXml(palette.surface)}" opacity="0.86"/><path d="M0 -136 V136" stroke="${escapeXml(palette.accent)}" stroke-width="8"/><rect x="-72" y="-72" width="144" height="22" rx="11" fill="${escapeXml(palette.accent)}" opacity="0.28"/><rect x="-72" y="-26" width="104" height="18" rx="9" fill="${escapeXml(palette.primary)}" opacity="0.18"/></g>`;
   }
+  if (object.kind === "map-pin") {
+    return `<g transform="${transform}" filter="url(#softShadow)"><path d="M0 -150 C88 -150 150 -88 150 -6 C150 96 42 160 0 214 C-42 160 -150 96 -150 -6 C-150 -88 -88 -150 0 -150 Z" fill="${escapeXml(palette.accent)}"/><circle r="68" fill="#fff" opacity="0.34"/><circle r="34" fill="${escapeXml(palette.primary)}" opacity="0.72"/></g>`;
+  }
 
   return `<g transform="${transform}" filter="url(#softShadow)"><rect x="-92" y="-92" width="184" height="184" rx="34" fill="${escapeXml(palette.accent)}"/><path d="M92 -60 L158 -96 L158 88 L92 128 Z" fill="${escapeXml(palette.primary)}" opacity="0.84"/><path d="M-92 92 H92 L158 88 L88 138 H-138 Z" fill="#fff" opacity="0.35"/><circle r="40" fill="#fff" opacity="0.36"/></g>`;
 }
 
 function renderCallouts(input: RenderSceneSetInput & { scene: Scene; loadedDevices: LoadedDevice[] }, frames: DeviceFrame[]): string {
+  if (styleBackgroundFor(input)) return "";
   const palette = effectivePaletteFor(input.sceneSet);
   return input.scene.callouts.slice(0, 1).map((callout, index) => {
     const deviceIndex = callout.anchorDevice ?? 0;
@@ -545,6 +582,7 @@ function sceneDefs(_input: RenderSceneSetInput & { scene: Scene }, _frames: Devi
   return `
     <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="30" stdDeviation="30" flood-color="#0f172a" flood-opacity="0.18"/></filter>
     <filter id="premiumBlur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="34"/></filter>
+    <filter id="aiBackgroundSanitize" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="14"/><feColorMatrix type="saturate" values="1.12"/><feComponentTransfer><feFuncA type="linear" slope="0.98"/></feComponentTransfer></filter>
     <filter id="deviceShadow-1" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0f172a" flood-opacity="0.20"/></filter>
     <filter id="deviceShadow-2" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#0f172a" flood-opacity="0.24"/></filter>
     <filter id="deviceShadow-3" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="38" stdDeviation="36" flood-color="#0f172a" flood-opacity="0.28"/></filter>

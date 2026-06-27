@@ -36,6 +36,59 @@ describe("OpenAIAdapter", () => {
     });
   });
 
+  it("sends the selected style reference image as multimodal input", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const adapter = new OpenAIAdapter({
+      apiKey: "openai-key",
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), init: init ?? {} });
+        return jsonResponse({ output_text: JSON.stringify({ id: "visual-system" }) });
+      },
+    });
+
+    await adapter.generateObject({
+      model: "gpt-4.1-mini",
+      task: "visual-system.generate",
+      input: {
+        styleReference: {
+          id: "sc-1",
+          mimeType: "image/jpeg",
+          imageBase64: "abc123",
+        },
+      },
+    });
+
+    const body = JSON.parse(String(calls[0]?.init.body));
+    expect(body.input[0].content).toEqual([
+      expect.objectContaining({ type: "input_text", text: expect.stringContaining('"imageBase64": "[attached reference image]"') }),
+      { type: "input_image", image_url: "data:image/jpeg;base64,abc123" },
+    ]);
+  });
+
+  it("generates a reference-guided image with gpt-image-1", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const adapter = new OpenAIAdapter({
+      apiKey: "openai-key",
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), init: init ?? {} });
+        return jsonResponse({ data: [{ b64_json: btoa("png-bytes") }] });
+      },
+    });
+
+    const result = await adapter.generateImage({
+      model: "gpt-image-1",
+      task: "style-background.generate",
+      prompt: "Generate an abstract app-store background.",
+      referenceImage: { bytes: new Uint8Array([1, 2, 3]), contentType: "image/jpeg" },
+    });
+
+    expect(calls[0]?.url).toBe("https://api.openai.com/v1/images/edits");
+    expect(calls[0]?.init.headers).toMatchObject({ Authorization: "Bearer openai-key" });
+    expect(calls[0]?.init.body).toBeInstanceOf(FormData);
+    expect(result.contentType).toBe("image/png");
+    expect(new TextDecoder().decode(result.bytes)).toBe("png-bytes");
+  });
+
   it("normalizes rate limit errors", async () => {
     const adapter = new OpenAIAdapter({
       apiKey: "openai-key",

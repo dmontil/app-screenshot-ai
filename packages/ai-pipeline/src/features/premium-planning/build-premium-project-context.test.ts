@@ -76,6 +76,22 @@ describe("BuildPremiumProjectContextUseCase", () => {
     });
   });
 
+  it("derives camper-van travel imagery without falling back to book/literary objects", async () => {
+    const result = await new BuildPremiumProjectContextUseCase().execute({
+      input: {
+        ...appInput,
+        appName: "Vantrip APP",
+        category: "travel",
+        targetAudience: "travelers with camper van",
+        mainValueProposition: "Create routes for camper van with IA",
+      },
+    });
+
+    expect(result.brandKit.imagery.keywords).toContain("camper-van");
+    expect(result.brandKit.imagery.keywords).toContain("routes");
+    expect(result.brandKit.imagery.keywords).not.toContain("books");
+  });
+
   it("canonicalizes utility aliases so utility apps do not fall back to travel art direction", async () => {
     const result = await new BuildPremiumProjectContextUseCase().execute({
       input: {

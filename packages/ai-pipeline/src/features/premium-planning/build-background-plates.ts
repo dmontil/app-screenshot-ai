@@ -19,17 +19,17 @@ function travelPlates(brandKit: BrandKit): BackgroundPlateSpec[] {
   return [
     plate({
       id: "travel-paper-map-a",
-      style: "literary-map-sketch",
+      style: "travel-map-sketch",
       texture: "aged-paper",
-      motifs: ["map-lines", "open-book", "city-sketch"],
+      motifs: ["map-lines", "route-stops", "city-sketch"],
       palette: { base: "#F0DFC4", ink: "#9B8972", accent: brandKit.palette.accent },
       safeZone: { x: 0.06, y: 0.2, width: 0.62, height: 0.74 },
     }),
     plate({
       id: "travel-paper-map-b",
-      style: "literary-map-sketch",
+      style: "travel-map-sketch",
       texture: "aged-paper",
-      motifs: ["map-lines", "route-dashes", "book-margin-notes"],
+      motifs: ["map-lines", "route-dashes", "trip-notes"],
       palette: { base: "#F6E8CF", ink: "#B0A18B", accent: brandKit.palette.accent },
       safeZone: { x: 0.08, y: 0.18, width: 0.58, height: 0.76 },
     }),

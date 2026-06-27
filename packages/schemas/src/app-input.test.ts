@@ -125,7 +125,7 @@ describe("SceneSetSchema", () => {
       backgroundPlates: [
         {
           id: "travel-paper-map-a",
-          style: "literary-map-sketch",
+          style: "travel-map-sketch",
           texture: "aged-paper",
           contrast: "low",
           motifs: ["map-lines", "open-book", "city-sketch"],
@@ -150,7 +150,7 @@ describe("SceneSetSchema", () => {
 
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.data.backgroundPlates?.[0]?.style).toBe("literary-map-sketch");
+    expect(result.data.backgroundPlates?.[0]?.style).toBe("travel-map-sketch");
     expect(result.data.scenes[0]?.background.plateId).toBe("travel-paper-map-a");
   });
 });

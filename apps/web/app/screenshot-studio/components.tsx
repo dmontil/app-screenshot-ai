@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 
-import type { EditableStoryboard, GenerateResponse, ProjectSummary, TextLayerOverride } from "./types";
+import { STANDARD_STYLE_REFERENCES } from "@app-screenshot-ai/schemas";
+
+import type { EditableStoryboard, GenerateResponse, ProjectSummary, StoredAppInput, TextLayerOverride } from "./types";
 
 const categories = ["travel", "productivity", "fitness", "finance", "education", "utility", "social"];
 
@@ -11,6 +13,7 @@ type ProviderSettingsProps = {
   model: string;
   geminiApiKey: string;
   openaiApiKey: string;
+  defaultOpen?: boolean | undefined;
   onProviderChange: (value: string) => void;
   onModelChange: (value: string) => void;
   onGeminiApiKeyChange: (value: string) => void;
@@ -35,9 +38,23 @@ type CreationStepperProps = ProviderSettingsProps & {
   fileCount: number;
   screenshotPreviews: ScreenshotPreview[];
   prefillMode: "blank" | "demo";
+  loadedInput: StoredAppInput | null;
+  loadedProjectId?: string | undefined;
+  generationMode: "deterministic" | "premium-direct";
+  premiumDirectCandidateCount: number;
+  generationModeIssue?: string | undefined;
+  onGenerationModeChange: (value: "deterministic" | "premium-direct") => void;
+  onPremiumDirectCandidateCountChange: (value: number) => void;
   onUseDemoProject: () => void;
   onStartBlankProject: () => void;
   onScreenshotsChange: (files: FileList | null) => void;
+};
+
+type AiImageDirectPanelProps = {
+  loading: boolean;
+  error: string | null;
+  result: { image?: { fileName: string; dataUrl: string }; imageUrl?: string; prompt?: string; localProjectPath?: string; trace?: Array<{ at: string; step: string; detail?: string }>; scenePlan?: unknown } | null;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 };
 
 type PreviewGalleryProps = {
@@ -77,36 +94,73 @@ type StudioTopBarProps = {
   onDownload: () => void;
 };
 
-type AppBarProps = {
+type StudioNavigationProps = {
   result: GenerateResponse | null;
   selectedProject: ProjectSummary | undefined;
   hasUnsavedPreview: boolean;
+  rerendering: boolean;
+  autoRerender: boolean;
+  onDownload: () => void;
 };
 
-export function AppBar({ result, selectedProject, hasUnsavedPreview }: AppBarProps) {
+const primaryNavItems = [
+  { href: "#ai-direct-pack", label: "Pack", detail: "Plan 4–5 screenshots" },
+  { href: "#ai-direct", label: "Single", detail: "Generate one PNG" },
+  { href: "#ai-direct-result", label: "Preview", detail: "Download and inspect" },
+  { href: "#create", label: "Full set", detail: "Legacy flow" },
+];
+
+const advancedNavItems = [
+  { href: "#projects", label: "Projects" },
+  { href: "#pipeline", label: "Pipeline" },
+  { href: "#provider-settings", label: "Provider settings" },
+  { href: "#inspector", label: "Inspector" },
+];
+
+export function StudioSidebar({ result, selectedProject, hasUnsavedPreview }: Pick<StudioNavigationProps, "result" | "selectedProject" | "hasUnsavedPreview">) {
   const projectLabel = result?.projectId ?? selectedProject?.appName ?? selectedProject?.projectId ?? "No project";
-  const navItems = [
-    { href: "#projects", label: "Projects" },
-    { href: "#create", label: "Create" },
-    { href: "#pipeline", label: "Pipeline" },
-    { href: "#preview", label: "Preview" },
-    { href: "#editor", label: "Editor" },
-    { href: "#export", label: "Export" },
-    { href: "#inspector", label: "Inspector" },
-  ];
 
   return (
-    <header className="appbar">
-      <a className="appbar-brand" href="#top" aria-label="Go to top">
+    <aside className="studio-sidebar" aria-label="Studio navigation">
+      <a className="sidebar-brand" href="#top" aria-label="Go to top">
         <span className="brand-mark">AI</span>
         <span><b>Screenshot Studio</b><small>{projectLabel}</small></span>
       </a>
-      <nav className="appbar-nav" aria-label="Studio navigation">
-        {navItems.map((item) => <a href={item.href} key={item.href}>{item.label}</a>)}
+      <nav className="sidebar-nav" aria-label="Main tools">
+        {primaryNavItems.map((item) => (
+          <a href={item.href} key={item.href}>
+            <b>{item.label}</b>
+            <small>{item.detail}</small>
+          </a>
+        ))}
       </nav>
-      <div className="appbar-status">
-        <span className={hasUnsavedPreview ? "status-pill warning" : "status-pill"}>{hasUnsavedPreview ? "Unsaved" : result ? "Saved" : "Idle"}</span>
+      <details className="sidebar-advanced">
+        <summary>Advanced tools</summary>
+        <nav aria-label="Advanced tools">
+          {advancedNavItems.map((item) => <a href={item.href} key={item.href}>{item.label}</a>)}
+        </nav>
+      </details>
+      <span className={hasUnsavedPreview ? "status-pill warning" : "status-pill"}>{hasUnsavedPreview ? "Unsaved preview" : result ? "Saved version" : "Idle"}</span>
+    </aside>
+  );
+}
+
+export function StudioHeader(props: StudioNavigationProps) {
+  const projectName = props.result?.projectId ?? props.selectedProject?.appName ?? props.selectedProject?.projectId ?? "No project open";
+  const status = props.rerendering ? "Rendering preview" : props.hasUnsavedPreview ? "Unsaved preview" : props.result ? "Saved version" : "Ready to create";
+
+  return (
+    <header className="studio-header">
+      <div>
+        <small>AI Direct Pack workspace</small>
+        <h1>{projectName}</h1>
       </div>
+      <div className="header-meta" aria-label="Workspace status">
+        <span>{status}</span>
+        <span>Auto-preview {props.autoRerender ? "on" : "off"}</span>
+      </div>
+      <a className="button secondary" href="#create">Full set</a>
+      <button type="button" className="button primary" disabled={!props.result || props.rerendering} onClick={props.onDownload}>Export ZIP</button>
     </header>
   );
 }
@@ -234,9 +288,12 @@ export function PipelineStatus({ loading, result }: { loading: boolean; result: 
 
 export function CreationStepper(props: CreationStepperProps) {
   const demo = props.prefillMode === "demo";
+  const loaded = props.loadedInput;
+  const brandColors = loaded?.brand?.colors?.join(", ") ?? "";
   return (
     <section className="panel create-panel" id="create">
-      <SectionHeader eyebrow="New project" title="Upload, describe, generate" description="Start blank for a real app, or load the LiteraryTrip demo copy explicitly when you want a fixture-backed smoke test." />
+      <SectionHeader eyebrow="New project" title="Upload, describe, generate" description="Start blank for a real app, load the LiteraryTrip demo, or open a saved project to reuse its stored metadata." />
+      {loaded && <div className="loaded-project-banner"><b>Loaded saved project data</b><small>{loaded.appName} · {loaded.category} · {loaded.screenshots?.length ?? 0} saved source screenshot{loaded.screenshots?.length === 1 ? "" : "s"}. Browser security prevents pre-filling the file picker; the opened generation is still editable/exportable below.</small></div>}
       <div className="template-switcher" aria-label="Project starter">
         <button type="button" className={demo ? "button secondary selected" : "button secondary"} onClick={props.onUseDemoProject}>Use LiteraryTrip demo copy</button>
         <button type="button" className={!demo ? "button secondary selected" : "button secondary"} onClick={props.onStartBlankProject}>Start blank project</button>
@@ -253,8 +310,8 @@ export function CreationStepper(props: CreationStepperProps) {
           <p>Upload at least 3 screenshots. At least 2 should show functional in-app UI; avoid relying on splash/logo screens.</p>
         </div>
         <Field label="Raw app screenshots">
-          <input name="screenshots" type="file" accept="image/png,image/jpeg" multiple required onChange={(event) => props.onScreenshotsChange(event.target.files)} />
-          <small>{props.fileCount ? `${props.fileCount} file(s) selected` : "No files selected yet."}</small>
+          <input name="screenshots" type="file" accept="image/png,image/jpeg" multiple required={!loaded} onChange={(event) => props.onScreenshotsChange(event.target.files)} />
+          <small>{props.fileCount ? `${props.fileCount} file(s) selected` : loaded ? `Using ${loaded.screenshots?.length ?? 0} saved source screenshot${loaded.screenshots?.length === 1 ? "" : "s"} unless you upload replacements.` : "No files selected yet."}</small>
         </Field>
         {props.screenshotPreviews.length > 0 && (
           <div className="upload-preview-grid" aria-label="Selected screenshot previews">
@@ -290,23 +347,83 @@ export function CreationStepper(props: CreationStepperProps) {
           <p>Keep it short. The pipeline uses these fields to create the creative brief, VisualSystem, and storyboard.</p>
         </div>
         <div className="grid two">
-          <Field label="Project ID"><input name="projectId" placeholder="literarytrip" defaultValue={demo ? "literarytrip-demo" : ""} /></Field>
-          <Field label="Generation label"><input name="generationLabel" placeholder="A/B label" defaultValue="AI generation" /></Field>
-          <Field label="App name"><input name="appName" required placeholder="Your app name" defaultValue={demo ? "LiteraryTrip" : ""} /></Field>
-          <Field label="Category"><select name="category" defaultValue={demo ? "travel" : "utility"}>{categories.map((category) => <option value={category} key={category}>{category}</option>)}</select></Field>
-          <Field label="Base locale"><input name="baseLocale" required defaultValue="en-US" /></Field>
-          <Field label="Target audience"><input name="targetAudience" required placeholder="e.g. indie readers who travel" defaultValue={demo ? "readers who travel" : ""} /></Field>
-          <Field label="Main value proposition"><input name="mainValueProposition" required placeholder="the main reason people install it" defaultValue={demo ? "turn books into walkable routes" : ""} /></Field>
-          <Field label="Brand colors"><input name="brandColors" placeholder="#111111, #ffffff, #ff8a3d" defaultValue={demo ? "#F7F1E7, #3B2416, #D99A32" : ""} /></Field>
-          <Field label="Website URL"><input name="websiteUrl" placeholder="https://example.com" /><small>Optional: extracts landing page colors, title, description, and H1 when reachable.</small></Field>
+          <Field label="Project ID"><input name="projectId" placeholder="literarytrip" defaultValue={props.loadedProjectId ?? (demo ? "literarytrip-demo" : "")} /></Field>
+          <Field label="Generation label"><input name="generationLabel" placeholder="A/B label" defaultValue={loaded ? "New version from saved project" : "AI generation"} /></Field>
+          <Field label="App name"><input name="appName" required placeholder="Your app name" defaultValue={loaded?.appName ?? (demo ? "LiteraryTrip" : "")} /></Field>
+          <Field label="Category"><select name="category" defaultValue={loaded?.category ?? (demo ? "travel" : "utility")}>{categories.map((category) => <option value={category} key={category}>{category}</option>)}</select></Field>
+          <Field label="Base locale"><input name="baseLocale" required defaultValue={loaded?.baseLocale ?? "en-US"} /></Field>
+          <Field label="Target audience"><input name="targetAudience" required placeholder="e.g. indie readers who travel" defaultValue={loaded?.targetAudience ?? (demo ? "readers who travel" : "")} /></Field>
+          <Field label="Main value proposition"><input name="mainValueProposition" required placeholder="the main reason people install it" defaultValue={loaded?.mainValueProposition ?? (demo ? "turn books into walkable routes" : "")} /></Field>
+          <Field label="Brand colors"><input name="brandColors" placeholder="#111111, #ffffff, #ff8a3d" defaultValue={brandColors || (demo ? "#F7F1E7, #3B2416, #D99A32" : "")} /></Field>
+          <Field label="Website URL"><input name="websiteUrl" placeholder="https://example.com" defaultValue={loaded?.brand?.websiteUrl ?? ""} /><small>Optional: extracts landing page colors, title, description, and H1 when reachable.</small></Field>
         </div>
       </div>
 
-      <ProviderSettings {...props} />
+      <div className="studio-section">
+        <div>
+          <h3>3. Choose visual reference</h3>
+          <p>Pick the standard art-direction reference the AI must follow. The model adapts the style to your app content instead of copying the reference.</p>
+        </div>
+        <label className="inline-toggle cover-toggle"><input name="includeCoverScreen" type="checkbox" /> Generate one extra cover / portada</label>
+        <div className="style-reference-grid" role="radiogroup" aria-label="Standard visual references">
+          {STANDARD_STYLE_REFERENCES.map((reference, index) => (
+            <label className="style-reference-card" key={reference.id}>
+              <input name="styleReferenceId" type="radio" value={reference.id} required defaultChecked={demo && index === 0} />
+              <span className="style-reference-preview">
+                <img src={reference.previewPath ?? reference.path} alt="" />
+              </span>
+              <span className="style-reference-copy">
+                <b>{reference.name}</b>
+                <small>{reference.width}×{reference.height} · {reference.mimeType}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="studio-section mode-section">
+        <div>
+          <h3>4. Generation mode</h3>
+          <p>Start with Deterministic for cheap local checks. Use Premium Direct when the goal is to match a direct ChatGPT-style result: OpenAI creates the complete final poster — background, phone, screenshot treatment, headline and layout.</p>
+        </div>
+        <input type="hidden" name="generationMode" value={props.generationMode} />
+        <div className="mode-card-grid" role="radiogroup" aria-label="Generation mode">
+          <button type="button" className={`mode-card ${props.generationMode === "deterministic" ? "selected" : ""}`} onClick={() => props.onGenerationModeChange("deterministic")} aria-pressed={props.generationMode === "deterministic"}>
+            <span className="mode-kicker">Fast / cheap</span>
+            <b>Deterministic</b>
+            <small>Current recipe pipeline. Best for smoke tests, fixture runs, and repeatable local exports.</small>
+          </button>
+          <button type="button" className={`mode-card premium ${props.generationMode === "premium-direct" ? "selected" : ""}`} onClick={() => props.onGenerationModeChange("premium-direct")} aria-pressed={props.generationMode === "premium-direct"}>
+            <span className="mode-kicker">Best visual quality</span>
+            <b>Premium Direct</b>
+            <small>OpenAI creates the full final screenshot poster using your style reference and uploaded app screenshots.</small>
+          </button>
+        </div>
+
+        {props.generationMode === "premium-direct" && (
+          <div className="premium-direct-panel">
+            <div>
+              <b>Control paid image generations</b>
+              <small>Each candidate generates one AI stage per final screenshot. Start with 1; use 3 only when comparing directions.</small>
+            </div>
+            <input type="hidden" name="premiumDirectCandidateCount" value={props.premiumDirectCandidateCount} />
+            <div className="candidate-picker" aria-label="Premium Direct candidate count">
+              {[1, 2, 3].map((count) => (
+                <button type="button" key={count} className={props.premiumDirectCandidateCount === count ? "selected" : ""} onClick={() => props.onPremiumDirectCandidateCountChange(count)}>
+                  {count}<span>{count === 1 ? "lowest cost" : count === 2 ? "compare" : "best odds"}</span>
+                </button>
+              ))}
+            </div>
+            {props.generationModeIssue ? <div className="mode-warning">{props.generationModeIssue}</div> : <div className="mode-success">Ready: OpenAI will generate the complete final poster. This is less controlled, but closest to direct ChatGPT visual output.</div>}
+          </div>
+        )}
+      </div>
+
+      <ProviderSettings {...props} defaultOpen={props.generationMode === "premium-direct" || Boolean(props.generationModeIssue)} />
 
       <div className="actions sticky-actions">
-        <button className="button primary large" disabled={props.loading}>{props.loading ? "Generating your store set..." : "Generate screenshots"}</button>
-        <small>Creates 5 PNGs, quality checks, ZIP, and local project artifacts.</small>
+        <button className="button primary large" disabled={props.loading || Boolean(props.generationModeIssue)}>{props.loading ? "Generating your store set..." : props.generationMode === "premium-direct" ? "Generate Premium Direct set" : "Generate screenshots"}</button>
+        <small>{props.generationModeIssue ?? "Creates one PNG per uploaded screenshot, optionally plus one cover, with quality checks, ZIP, and local project artifacts."}</small>
       </div>
     </section>
   );
@@ -314,9 +431,9 @@ export function CreationStepper(props: CreationStepperProps) {
 
 export function ProviderSettings(props: ProviderSettingsProps) {
   return (
-    <details className="advanced-card">
+    <details className="advanced-card" id="provider-settings" open={props.defaultOpen}>
       <summary>Advanced provider settings</summary>
-      <p>Fixture mode is the fastest way to test. Switch to Gemini or OpenAI when you want model-generated output with your own local key. Masked values mean a key was detected from your local environment.</p>
+      <p>Fixture mode is the fastest way to test. Switch to OpenAI for Premium Direct full-poster generation, or Gemini for deterministic planning. Keys you type are saved in this browser so you do not need to re-enter them every time. Masked values mean a key was detected from your local environment.</p>
       <div className="key-status-row">
         <span className={props.geminiApiKey ? "key-status configured" : "key-status"}>Gemini key {props.geminiApiKey ? "configured" : "not set"}</span>
         <span className={props.openaiApiKey ? "key-status configured" : "key-status"}>OpenAI key {props.openaiApiKey ? "configured" : "not set"}</span>
@@ -329,11 +446,217 @@ export function ProviderSettings(props: ProviderSettingsProps) {
             <option value="openai">OpenAI</option>
           </select>
         </Field>
-        <Field label="Model"><input name="model" value={props.model} onChange={(event) => props.onModelChange(event.target.value)} /></Field>
+        <Field label="Planning model"><input name="model" value={props.model} onChange={(event) => props.onModelChange(event.target.value)} /></Field>
+        {props.provider === "openai" && <Field label="OpenAI image model"><input name="imageModel" list="openai-image-models" defaultValue="gpt-image-2" /><datalist id="openai-image-models"><option value="gpt-image-2" /><option value="gpt-image-1" /></datalist><small>Used by Premium Direct to generate complete final posters. Use gpt-image-2 if your OpenAI account has access; fall back to gpt-image-1 otherwise.</small></Field>}
         <Field label="Gemini API key"><input name="geminiApiKey" type="password" autoComplete="off" value={props.geminiApiKey} onChange={(event) => props.onGeminiApiKeyChange(event.target.value)} placeholder="Only required for Gemini" /></Field>
         <Field label="OpenAI API key"><input name="openaiApiKey" type="password" autoComplete="off" value={props.openaiApiKey} onChange={(event) => props.onOpenaiApiKeyChange(event.target.value)} placeholder="Only required for OpenAI" /></Field>
       </div>
     </details>
+  );
+}
+
+type PackPlatform = "iphone" | "ipad" | "android-phone" | "android-tablet";
+
+type PackScreen = {
+  index: number;
+  sceneType: "cover" | "feature";
+  headline: string;
+  subheadline: string;
+};
+
+const platformPresets: Record<PackPlatform, { label: string; width: number; height: number; store: string }> = {
+  iphone: { label: "iPhone", width: 1320, height: 2868, store: "App Store" },
+  ipad: { label: "iPad", width: 2048, height: 2732, store: "App Store" },
+  "android-phone": { label: "Android phone", width: 1080, height: 1920, store: "Google Play" },
+  "android-tablet": { label: "Android tablet", width: 1600, height: 2560, store: "Google Play" },
+};
+
+function buildInitialPackScreens(count: number): PackScreen[] {
+  return Array.from({ length: count }, (_, index) => ({
+    index: index + 1,
+    sceneType: index === 0 ? "cover" : "feature",
+    headline: index === 0 ? "Your strongest hook" : `Feature benefit ${index}`,
+    subheadline: index === 0 ? "Set the promise for the whole screenshot set" : "Explain the user value in one short line",
+  }));
+}
+
+export function AiDirectPackPlanner() {
+  const [platform, setPlatform] = useState<PackPlatform>("iphone");
+  const [screenCount, setScreenCount] = useState(5);
+  const [screens, setScreens] = useState<PackScreen[]>(() => buildInitialPackScreens(5));
+  const preset = platformPresets[platform];
+
+  function changeScreenCount(nextCount: number) {
+    setScreenCount(nextCount);
+    setScreens((current) => {
+      const next = buildInitialPackScreens(nextCount);
+      return next.map((screen, index) => current[index] ? { ...screen, ...current[index], index: screen.index, sceneType: index === 0 ? "cover" : current[index].sceneType } : screen);
+    });
+  }
+
+  function updateScreen(index: number, patch: Partial<PackScreen>) {
+    setScreens((current) => current.map((screen) => screen.index === index ? { ...screen, ...patch } : screen));
+  }
+
+  return (
+    <section className="panel pack-planner" id="ai-direct-pack">
+      <SectionHeader eyebrow="AI Direct Pack" title="Plan a coherent screenshot pack" description="Design the full 4–5 image set first. Generation will happen one image at a time, using approved previous images to preserve visual continuity." />
+      <div className="pack-layout">
+        <div className="pack-main">
+          <div className="form-card">
+            <h3>1. Pack setup</h3>
+            <div className="grid three">
+              <Field label="Platform">
+                <select value={platform} onChange={(event) => setPlatform(event.target.value as PackPlatform)}>
+                  {Object.entries(platformPresets).map(([value, option]) => <option value={value} key={value}>{option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Screenshots">
+                <select value={screenCount} onChange={(event) => changeScreenCount(Number(event.target.value))}>
+                  <option value={4}>4 screenshots</option>
+                  <option value={5}>5 screenshots</option>
+                </select>
+              </Field>
+              <Field label="Output size"><input readOnly value={`${preset.width} × ${preset.height}`} /></Field>
+            </div>
+            <div className="pack-summary">
+              <span>{preset.store}</span>
+              <span>{preset.label}</span>
+              <span>{screenCount} PNGs</span>
+              <span>Sequential generation</span>
+            </div>
+          </div>
+
+          <div className="form-card">
+            <h3>2. Shared inputs</h3>
+            <div className="grid two">
+              <Field label="Style reference"><input type="file" accept="image/png,image/jpeg,image/webp" /><small>Global visual direction for every screen.</small></Field>
+              <Field label="Approved cover"><input type="file" accept="image/png,image/jpeg,image/webp" /><small>Optional. Use when you already have a cover to match.</small></Field>
+              <Field label="FAL key"><input type="password" placeholder="Uses FAL_KEY env if empty" autoComplete="off" /></Field>
+            </div>
+          </div>
+
+          <div className="screen-plan">
+            <div className="screen-plan-header">
+              <div><h3>3. Screen plan</h3><p>Each feature screen can use its own app screenshot. Later generation should receive previous approved outputs as continuity references.</p></div>
+            </div>
+            {screens.map((screen) => (
+              <article className="pack-screen-card" key={screen.index}>
+                <div className="pack-screen-index"><b>{String(screen.index).padStart(2, "0")}</b><small>{screen.index === 1 ? "Hook" : "Feature"}</small></div>
+                <div className="pack-screen-fields">
+                  <div className="grid two">
+                    <Field label="Scene type">
+                      <select value={screen.sceneType} onChange={(event) => updateScreen(screen.index, { sceneType: event.target.value as PackScreen["sceneType"] })} disabled={screen.index === 1}>
+                        <option value="cover">Cover / hook</option>
+                        <option value="feature">Feature with screenshot</option>
+                      </select>
+                    </Field>
+                    <Field label="App screenshot"><input type="file" accept="image/png,image/jpeg,image/webp" disabled={screen.sceneType === "cover"} /><small>{screen.sceneType === "cover" ? "Not needed for cover." : "Optional now; needed when generating."}</small></Field>
+                  </div>
+                  <Field label="Headline"><input value={screen.headline} onChange={(event) => updateScreen(screen.index, { headline: event.target.value })} /></Field>
+                  <Field label="Subheadline"><input value={screen.subheadline} onChange={(event) => updateScreen(screen.index, { subheadline: event.target.value })} /></Field>
+                  <div className="continuity-note">Continuity: {screen.index === 1 ? "uses style reference" : `uses style reference + approved screens 01–${String(screen.index - 1).padStart(2, "0")}`}</div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <aside className="pack-preview" aria-label="Pack preview">
+          <div className="pack-preview-header">
+            <b>Pack preview</b>
+            <small>{preset.label} · {preset.width}×{preset.height}</small>
+          </div>
+          <div className="pack-preview-grid">
+            {screens.map((screen) => (
+              <div className="pack-preview-card" key={screen.index}>
+                <span>{String(screen.index).padStart(2, "0")}</span>
+                <b>{screen.headline}</b>
+                <small>{screen.sceneType === "cover" ? "Cover" : "Feature"} · Not generated</small>
+              </div>
+            ))}
+          </div>
+          <div className="pack-actions">
+            <button type="button" className="button primary" disabled>Generate pack</button>
+            <button type="button" className="button secondary" disabled>Download ZIP</button>
+            <small>UI only for now. Backend will generate one-by-one and pass prior approved images forward.</small>
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+export function AiImageDirectPanel(props: AiImageDirectPanelProps) {
+  const [sceneType, setSceneType] = useState<"cover" | "feature">("feature");
+
+  return (
+    <section className="panel ai-direct-panel" id="ai-direct">
+      <SectionHeader eyebrow="AI Image Direct" title="Generate one final App Store image" description="Fill only the product message, choose cover or feature, upload the visual references, then generate one PNG you can preview, download, and audit." />
+      <div className="ai-direct-layout">
+        <form onSubmit={props.onSubmit} className="ai-direct-form">
+          <div className="form-card">
+            <h3>1. Product message</h3>
+            <div className="grid two">
+              <Field label="App name"><input name="appName" required placeholder="VanTrip" /></Field>
+              <Field label="Category"><input name="category" required placeholder="Travel / Campervan" /></Field>
+              <Field label="Audience"><input name="targetAudience" required placeholder="Campervan owners planning weekend routes" /></Field>
+              <Field label="Value proposition"><input name="valueProposition" required placeholder="Create personalized van trips fast" /></Field>
+              <Field label="Headline"><input name="headline" required placeholder="Plan Perfect Van Routes" /></Field>
+              <Field label="Subheadline"><input name="subheadline" placeholder="Smart routes for every RV adventure" /></Field>
+            </div>
+          </div>
+
+          <div className="form-card">
+            <h3>2. Semantic guidance</h3>
+            <div className="grid two">
+              <Field label="Product visual anchor"><textarea name="productVisualAnchor" placeholder="campervan, RV, route pin, road, map, compass, destination marker, route planning" /><small>Tell the model what the buddy/object/decorations must come from. This prevents it from copying mascots or drifting into generic category clichés.</small></Field>
+              <Field label="Avoid generic clichés"><textarea name="avoidGenericCliches" placeholder="animal mascot, bear, backpack mascot, generic hiking gear, fake badges, stock mountains, generic camping poster" /><small>Comma or newline separated. Use this to block bears, laurels, fake ratings, proof badges, etc.</small></Field>
+            </div>
+          </div>
+
+          <div className="form-card compact-fields">
+            <h3>3. Scene and output</h3>
+            <div className="grid three">
+              <Field label="Scene type"><select name="sceneType" value={sceneType} onChange={(event) => setSceneType(event.target.value as "cover" | "feature")}><option value="cover">Cover / hook</option><option value="feature">Feature with screenshot</option></select></Field>
+              <Field label="Output width"><input name="outputWidth" type="number" defaultValue="1320" min="320" /></Field>
+              <Field label="Output height"><input name="outputHeight" type="number" defaultValue="2868" min="320" /></Field>
+            </div>
+          </div>
+
+          <div className="form-card">
+            <h3>4. Inputs</h3>
+            <div className="grid two">
+              <Field label="Style reference"><input name="referenceStyleImage" type="file" accept="image/png,image/jpeg,image/webp" required /><small>Required. Use the target visual style.</small></Field>
+              <Field label="App screenshot"><input name="screenshotImage" type="file" accept="image/png,image/jpeg,image/webp" required={sceneType === "feature"} disabled={sceneType === "cover"} /><small>{sceneType === "feature" ? "Required for feature scenes." : "Disabled for cover-only exploration."}</small></Field>
+              <Field label="Approved cover"><input name="approvedCoverImage" type="file" accept="image/png,image/jpeg,image/webp" /><small>Optional. Keeps later feature scenes consistent with a cover you like.</small></Field>
+              <Field label="FAL key"><input name="falKey" type="password" placeholder="Uses FAL_KEY env if empty" autoComplete="off" /><small>Paste only when your local env has no key.</small></Field>
+            </div>
+            <input name="projectId" type="hidden" value="ai-image-direct" />
+          </div>
+
+          <div className="actions sticky-actions">
+            <button className="button primary large" disabled={props.loading}>{props.loading ? "Generating PNG..." : "Generate PNG"}</button>
+            <small>Calls fal-ai/nano-banana-2/edit and stores the prompt, response, and output image locally.</small>
+          </div>
+        </form>
+
+        <aside className="ai-direct-preview" id="ai-direct-result" aria-label="AI Image Direct preview">
+          <div className="preview-frame">
+            {props.result?.image ? <img src={props.result.image.dataUrl} alt="AI Image Direct result" /> : <div className="preview-placeholder"><b>Preview appears here</b><small>Generate a PNG to download it and inspect the prompt.</small></div>}
+          </div>
+          {props.error && <StatusBanner kind="error">{props.error}</StatusBanner>}
+          {props.result?.image && (
+            <div className="ai-direct-result">
+              <div className="actions"><a className="button primary" href={props.result.image.dataUrl} download={props.result.image.fileName}>Download PNG</a><small>{props.result.localProjectPath}</small></div>
+              <details className="advanced-card" open><summary>Scene plan</summary><pre>{JSON.stringify(props.result.scenePlan ?? {}, null, 2)}</pre></details>
+              <details className="advanced-card"><summary>Generation log</summary><pre>{JSON.stringify(props.result.trace ?? [], null, 2)}</pre></details>
+              <details className="advanced-card"><summary>Inspect generated prompt</summary><pre>{props.result.prompt}</pre></details>
+            </div>
+          )}
+        </aside>
+      </div>
+    </section>
   );
 }
 
@@ -498,7 +821,7 @@ export function AdvancedInspector({ result, storyboard }: { result: GenerateResp
             <InspectorBlock title="Local project" value={{ path: result.localProjectPath, provider: result.provider, model: result.model, generationId: result.generationId }} />
             <InspectorBlock title="Quality report" value={result.qualityReport} />
             <InspectorBlock title="VisualSystem + Storyboard" value={{ visualSystem: result.visualSystem, storyboard: storyboard ?? result.storyboard }} />
-            <InspectorBlock title="Premium planning" value={{ brandKit: result.brandKit, productUnderstanding: result.productUnderstanding, premiumRecipes: result.premiumRecipes, premiumCandidates: result.premiumCandidates, sceneSet: result.sceneSet }} />
+            <InspectorBlock title="Premium planning" value={{ styleReference: result.styleReference, brandKit: result.brandKit, productUnderstanding: result.productUnderstanding, premiumRecipes: result.premiumRecipes, premiumCandidates: result.premiumCandidates, sceneSet: result.sceneSet }} />
             <InspectorBlock title="Export manifest" value={result.exportManifest} />
           </div>
         )}

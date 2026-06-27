@@ -57,6 +57,6 @@ function parseProvider(value: string): SupportedProvider {
 
 function defaultModelFor(provider: SupportedProvider): string {
   if (provider === "gemini") return "gemini-2.5-flash";
-  if (provider === "openai") return "gpt-4.1-mini";
+  if (provider === "openai") return "gpt-4.1";
   return "fixture-v1";
 }
