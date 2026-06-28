@@ -7,6 +7,8 @@ import { createModelGateway, type SupportedProvider } from "@app-screenshot-ai/m
 import { createDefaultPremiumRecipeLibrary, PatternLibrary } from "@app-screenshot-ai/pattern-library";
 import { AppInputSchema, getStandardStyleReference, STANDARD_STYLE_REFERENCES, type AppInput, type RawScreenshot, type StandardStyleReference } from "@app-screenshot-ai/schemas";
 
+import { defaultImageModelFor, defaultModelFor, parseScreenshotKind, readActualSecret, readGenerationMode, readPositiveInt, readProvider, readString, slug } from "./generate-route-utils";
+
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -196,51 +198,4 @@ function pattern(category: string, conversionIntent: string, tone: string[]) {
     rules: { maxHeadlineWords: 6, backgroundComplexity: "low" as const, uiVisibility: "high" as const },
     whyItWorks: ["Keeps the app UI visible.", "Uses short readable headlines.", "Maintains visual continuity."],
   };
-}
-
-function readString(value: FormDataEntryValue | null): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function readGenerationMode(value: FormDataEntryValue | null): "deterministic" | "premium-direct" | "benchmark" {
-  const mode = readString(value);
-  if (mode === "premium-direct" || mode === "benchmark") return mode;
-  return "deterministic";
-}
-
-function readPositiveInt(value: FormDataEntryValue | null): number | undefined {
-  const parsed = Number.parseInt(readString(value), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function readProvider(value: FormDataEntryValue | null): SupportedProvider {
-  const provider = readString(value);
-  if (provider === "gemini" || provider === "openai" || provider === "fixture") return provider;
-  return "fixture";
-}
-
-function parseScreenshotKind(value: string): RawScreenshot["kind"] {
-  if (value === "splash" || value === "logo" || value === "empty" || value === "unknown") return value;
-  return "functional";
-}
-
-function readActualSecret(formValue: string, envValue: string | undefined): string {
-  if (!formValue) return envValue ?? "";
-  if (formValue.includes("•")) return envValue ?? "";
-  return formValue;
-}
-
-function defaultModelFor(provider: SupportedProvider): string {
-  if (provider === "gemini") return "gemini-2.5-flash";
-  if (provider === "openai") return "gpt-4.1";
-  return "fixture-v1";
-}
-
-function defaultImageModelFor(provider: SupportedProvider): string | undefined {
-  if (provider === "openai") return "gpt-image-2";
-  return undefined;
-}
-
-function slug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-|-$/g, "") || "app-project";
 }
