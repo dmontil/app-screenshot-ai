@@ -15,46 +15,9 @@ import {
   StatusBanner,
 } from "./screenshot-studio/components";
 import { createCreatorWorkspaceApp, createCreatorWorkspacePack, fetchCreatorWorkspace, fetchProjectGeneration, fetchProjects, fetchProviderSettings, generateAiImageDirect, generateAiImageDirectPack, generateStorePack, rerenderStorePack, saveCreatorWorkspaceGenerationArtifacts } from "./screenshot-studio/api-client";
+import { localeBadgeClass, packSummary, type CreatorApp, type CreatorSettings, type CreatorView } from "./screenshot-studio/creator-workspace-view-model";
 import { loadProviderPreferences, mergeProviderSettings, saveProviderPreferences } from "./screenshot-studio/provider-preferences";
 import type { EditableStoryboard, GenerateResponse, ProjectSummary, StoredAppInput, TextLayerOverride } from "./screenshot-studio/types";
-
-type CreatorView = "home" | "create-app" | "app-dashboard" | "pack" | "settings";
-
-type CreatorApp = {
-  id: string;
-  name: string;
-  category: string;
-  audience: string;
-  valueProposition: string;
-  websiteUrl?: string;
-  brandColors?: string;
-  updatedAt: string;
-  packs: CreatorPack[];
-};
-
-type CreatorPack = {
-  id: string;
-  name: string;
-  platform: string;
-  size: string;
-  screenCount: number;
-  locales: Array<{ code: string; status: string; screens?: Array<{ index: number; sceneType: string; headline: string; subheadline: string; status: "Draft" | "Approved"; approvedAt?: string }> }>;
-  latestGeneration?: {
-    generatedAt: string;
-    localProjectPath?: string;
-    images: Array<{ index: number; id: string; fileName: string; dataUrl: string; prompt?: string; scenePlan?: unknown }>;
-    trace: Array<{ at: string; step: string; detail?: string }>;
-  };
-  updatedAt: string;
-};
-
-type CreatorSettings = {
-  falKey: string;
-  geminiApiKey: string;
-  openaiApiKey: string;
-  defaultPlatform: string;
-  defaultPromptVersion: "v1" | "v2" | "v3" | "v4";
-};
 
 const creatorStorageKey = "app-screenshot-ai.creator-state.v1";
 const creatorSettingsKey = "app-screenshot-ai.creator-settings.v1";
@@ -652,24 +615,6 @@ function formatShortDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "unknown";
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function packSummary(pack: CreatorPack): { primary: string; secondary: string } {
-  const approved = pack.locales.reduce((total, locale) => total + (locale.screens?.filter((screen) => screen.status === "Approved").length ?? 0), 0);
-  const totalScreens = Math.max(1, pack.screenCount * Math.max(1, pack.locales.length));
-  const translated = pack.locales.filter((locale) => locale.code !== "en-US" && locale.status !== "Not translated").length;
-  const localeSummary = pack.locales.map((locale) => `${locale.code} ${locale.status.toLowerCase()}`).join(" · ");
-  return {
-    primary: `${pack.platform} · ${pack.screenCount} screens · ${approved}/${totalScreens} approved`,
-    secondary: `${translated}/${Math.max(0, pack.locales.length - 1)} translated · ${localeSummary || "No locales yet"}`,
-  };
-}
-
-function localeBadgeClass(locale: CreatorPack["locales"][number]): string {
-  const normalized = locale.status.toLowerCase();
-  if (normalized.includes("translated") || normalized.includes("approved")) return "locale-badge done";
-  if (normalized.includes("needs")) return "locale-badge warning";
-  return "locale-badge";
 }
 
 function generationModeIssueFor(params: { generationMode: "deterministic" | "premium-direct"; provider: string; openaiApiKey: string }): string | undefined {
