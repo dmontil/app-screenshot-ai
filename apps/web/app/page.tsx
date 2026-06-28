@@ -14,20 +14,16 @@ import {
   QualityExport,
   StatusBanner,
 } from "./screenshot-studio/components";
-import { createCreatorWorkspaceApp, createCreatorWorkspacePack, fetchCreatorWorkspace, fetchProjectGeneration, fetchProjects, fetchProviderSettings, generateAiImageDirect, generateAiImageDirectPack, generateStorePack, rerenderStorePack, saveCreatorWorkspaceGenerationArtifacts } from "./screenshot-studio/api-client";
+import { createCreatorWorkspaceApp, createCreatorWorkspacePack, fetchCreatorWorkspace, fetchProjectGeneration, fetchProjects, generateAiImageDirect, generateAiImageDirectPack, generateStorePack, rerenderStorePack, saveCreatorWorkspaceGenerationArtifacts } from "./screenshot-studio/api-client";
 import { localeBadgeClass, packSummary, type CreatorApp, type CreatorSettings, type CreatorView } from "./screenshot-studio/creator-workspace-view-model";
-import { loadProviderPreferences, mergeProviderSettings, saveProviderPreferences } from "./screenshot-studio/provider-preferences";
+import { useProviderSettings } from "./screenshot-studio/use-provider-settings";
 import type { EditableStoryboard, GenerateResponse, ProjectSummary, StoredAppInput, TextLayerOverride } from "./screenshot-studio/types";
 
 const creatorStorageKey = "app-screenshot-ai.creator-state.v1";
 const creatorSettingsKey = "app-screenshot-ai.creator-settings.v1";
 
 export default function HomePage() {
-  const [provider, setProvider] = useState("fixture");
-  const [model, setModel] = useState("fixture-v1");
-  const [geminiApiKey, setGeminiApiKey] = useState("");
-  const [openaiApiKey, setOpenaiApiKey] = useState("");
-  const [providerSettingsLoaded, setProviderSettingsLoaded] = useState(false);
+  const { provider, model, geminiApiKey, openaiApiKey, setGeminiApiKey, setOpenaiApiKey } = useProviderSettings();
   const [loading, setLoading] = useState(false);
   const [aiDirectLoading, setAiDirectLoading] = useState(false);
   const [aiDirectError, setAiDirectError] = useState<string | null>(null);
@@ -105,37 +101,6 @@ export default function HomePage() {
       screenshotPreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
     };
   }, [screenshotPreviews]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchProviderSettings()
-      .then((settings) => {
-        if (cancelled) return;
-        const merged = mergeProviderSettings(settings, loadProviderPreferences(window.localStorage));
-        setProvider(merged.provider);
-        setModel(merged.model);
-        setGeminiApiKey(merged.geminiApiKey);
-        setOpenaiApiKey(merged.openaiApiKey);
-        setProviderSettingsLoaded(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        const stored = loadProviderPreferences(window.localStorage);
-        if (stored.provider) setProvider(stored.provider);
-        if (stored.model) setModel(stored.model);
-        if (stored.geminiApiKey) setGeminiApiKey(stored.geminiApiKey);
-        if (stored.openaiApiKey) setOpenaiApiKey(stored.openaiApiKey);
-        setProviderSettingsLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!providerSettingsLoaded) return;
-    saveProviderPreferences(window.localStorage, { provider, model, geminiApiKey, openaiApiKey });
-  }, [providerSettingsLoaded, provider, model, geminiApiKey, openaiApiKey]);
 
   useEffect(() => {
     if (!autoRerender || !result || !editableStoryboard || rerendering) return;
@@ -323,13 +288,6 @@ export default function HomePage() {
     setPrefillMode(mode);
     setLoadedInput(null);
     setFormVersion((current) => current + 1);
-  }
-
-  function changeProvider(nextProvider: string) {
-    setProvider(nextProvider);
-    if (nextProvider === "gemini") setModel("gemini-2.5-flash");
-    else if (nextProvider === "openai") setModel("gpt-4.1");
-    else setModel("fixture-v1");
   }
 
   function translateCopyForActiveLocale() {
