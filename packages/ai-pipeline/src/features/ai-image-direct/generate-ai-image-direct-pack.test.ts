@@ -8,6 +8,7 @@ import type { ImageEditProvider } from "@app-screenshot-ai/model-gateway";
 import { buildCoverPrompt } from "./build-cover-prompt";
 import { buildFeaturePrompt } from "./build-feature-prompt";
 import { GenerateAiImageDirectPackUseCase, validateAndNormalize } from "./generate-ai-image-direct-pack";
+import { GenerateAiImageDirectSequencePackUseCase } from "./generate-ai-image-direct-sequence-pack";
 import { PlanAiImageSceneUseCase } from "./plan-ai-image-scene";
 import type { NormalizedAiImageDirectInput } from "./types";
 
@@ -91,7 +92,40 @@ describe("AI Image Direct", () => {
     });
 
     expect(calls[0]!.imagePaths).toEqual(["/tmp/reference.png", "/tmp/screenshot.png", "/tmp/cover.png"]);
-    expect(calls[0]!.prompt).toContain("Use IMAGE 3 as the approved campaign cover");
+    expect(calls[0]!.prompt).toContain("Use the approved campaign reference images only for style continuity");
+  });
+
+  it("puts feature screenshots last in sequential pack generations so continuity images cannot replace the real UI", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "ai-image-direct-sequence-"));
+    const calls: Array<{ prompt: string; imagePaths: string[] }> = [];
+    const provider: ImageEditProvider = {
+      async edit(input) {
+        calls.push({ prompt: input.prompt, imagePaths: input.imagePaths });
+        return { imageUrl: "data:image/png;base64,iVBORw0KGgo=", raw: { ok: true } };
+      },
+    };
+
+    await new GenerateAiImageDirectSequencePackUseCase(provider).execute({
+      appName: "VanTrip",
+      category: "Travel / Campervan",
+      targetAudience: "Campervan owners",
+      valueProposition: "Create personalized van trips fast",
+      referenceStyleImagePath: "/tmp/reference.png",
+      outputWidth: 1320,
+      outputHeight: 2868,
+      outputDir: dir,
+      screens: [
+        { sceneType: "cover" },
+        { sceneType: "feature", screenshotImagePath: "/tmp/screenshot-02.png" },
+        { sceneType: "feature", screenshotImagePath: "/tmp/screenshot-03.png" },
+      ],
+    });
+
+    expect(calls[0]!.imagePaths).toEqual(["/tmp/reference.png"]);
+    expect(calls[1]!.imagePaths).toEqual(["/tmp/reference.png", path.join(dir, "renders", "screen-01.png"), "/tmp/screenshot-02.png"]);
+    expect(calls[1]!.prompt).toContain("Use IMAGE 3 (the LAST image) exactly as provided");
+    expect(calls[2]!.imagePaths).toEqual(["/tmp/reference.png", path.join(dir, "renders", "screen-01.png"), "/tmp/screenshot-03.png"]);
+    expect(calls[2]!.prompt).toContain("Use IMAGE 3 (the LAST image) exactly as provided");
   });
 
   it("persists input, prompt, raw response and output image artifacts", async () => {

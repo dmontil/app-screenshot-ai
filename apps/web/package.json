@@ -12,14 +12,15 @@
   },
   "dependencies": {
     "@app-screenshot-ai/ai-pipeline": "0.1.0",
+    "@app-screenshot-ai/local-project-session": "0.1.0",
     "@app-screenshot-ai/local-project-store": "0.1.0",
     "@app-screenshot-ai/model-gateway": "0.1.0",
     "@app-screenshot-ai/pattern-library": "0.1.0",
     "@app-screenshot-ai/schemas": "0.1.0",
+    "jszip": "^3.10.1",
     "next": "^15.2.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "@app-screenshot-ai/local-project-session": "0.1.0"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

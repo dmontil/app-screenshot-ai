@@ -54,7 +54,7 @@ export class BuildPremiumProjectContextUseCase {
     try {
       const html = await this.landingPageLoader.load(url);
       if (!html) return undefined;
-      const context = parseLandingPage(url, html);
+      const context = analyzeLandingPageHtml(url, html);
       if (!context.title && !context.description && !context.headline && context.extractedColors.length === 0) return undefined;
       return context;
     } catch {
@@ -117,7 +117,7 @@ function buildBrandKit(input: AppInput, landingPage: LandingPageContext | undefi
   });
 }
 
-function parseLandingPage(url: string, html: string): LandingPageContext {
+export function analyzeLandingPageHtml(url: string, html: string): LandingPageContext {
   const title = cleanText(matchTag(html, "title"));
   const description = cleanText(metaContent(html, "description") ?? metaContent(html, "og:description") ?? metaContent(html, "twitter:description"));
   const headline = cleanText(matchTag(html, "h1") ?? metaContent(html, "og:title") ?? title);

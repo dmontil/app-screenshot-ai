@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BuildPremiumProjectContextUseCase } from "./build-premium-project-context";
+import { BuildPremiumProjectContextUseCase, analyzeLandingPageHtml } from "./build-premium-project-context";
 
 const appInput = {
   appName: "LiteraryTrip",
@@ -73,6 +73,28 @@ describe("BuildPremiumProjectContextUseCase", () => {
       description: "Discover book locations and turn them into walkable city routes.",
       headline: "Walk through the books you love",
       extractedColors: ["#123456", "#FF3366", "#BBDDEE"],
+    });
+  });
+
+  it("analyzes landing page HTML as a reusable public behavior", () => {
+    const result = analyzeLandingPageHtml("https://example.com", `
+      <html>
+        <head>
+          <title>Example App</title>
+          <meta name="theme-color" content="#0af" />
+          <meta property="og:description" content="Plan beautiful launches." />
+          <style>.hero { color: #112233; background: #445566; border-color: #112233; }</style>
+        </head>
+        <body><h1>Launch with confidence</h1></body>
+      </html>
+    `);
+
+    expect(result).toMatchObject({
+      url: "https://example.com",
+      title: "Example App",
+      description: "Plan beautiful launches.",
+      headline: "Launch with confidence",
+      extractedColors: ["#00AAFF", "#112233", "#445566"],
     });
   });
 

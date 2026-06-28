@@ -85,10 +85,19 @@ function validateAndNormalizeBase(input: AiImageDirectInput): AiImageDirectInput
 }
 
 function imagePathsFor(input: NormalizedAiImageDirectInput): string[] {
+  if (input.screenshotLast && input.screenshotImagePath) {
+    return [
+      input.referenceStyleImagePath,
+      ...(input.approvedCoverImagePath ? [input.approvedCoverImagePath] : []),
+      ...(input.continuityImagePaths ?? []),
+      input.screenshotImagePath,
+    ];
+  }
   return [
     input.referenceStyleImagePath,
     ...(input.screenshotImagePath ? [input.screenshotImagePath] : []),
     ...(input.approvedCoverImagePath ? [input.approvedCoverImagePath] : []),
+    ...(input.continuityImagePaths ?? []),
   ];
 }
 
@@ -111,7 +120,7 @@ async function persistArtifacts(params: {
   const scenePlanPath = path.join(pipelineDir, "scene-plan.json");
   const scenePlanPromptPath = path.join(pipelineDir, "scene-plan-prompt.txt");
   const scenePlanResponsePath = path.join(pipelineDir, "scene-plan-response.json");
-  const outputImagePath = path.join(rendersDir, `${params.input.sceneType}.png`);
+  const outputImagePath = path.join(rendersDir, `${params.input.outputBasename ?? params.input.sceneType}.png`);
 
   await Promise.all([
     writeFile(inputPath, `${JSON.stringify(params.input, null, 2)}\n`),

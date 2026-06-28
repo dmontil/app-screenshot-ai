@@ -59,6 +59,14 @@ export type StandardStyleReference = {
   imageBase64?: string;
 };
 
+export type LandingPageAnalysis = {
+  url: string;
+  title?: string;
+  description?: string;
+  headline?: string;
+  extractedColors: string[];
+};
+
 export type StoredAppInput = {
   appName: string;
   category: string;
