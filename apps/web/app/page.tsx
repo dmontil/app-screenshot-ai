@@ -583,7 +583,7 @@ export default function HomePage() {
 
         {creatorView === "app-dashboard" && selectedCreatorApp && (
           <div className="app-dashboard-view">
-            <div className="dashboard-header"><div><span className="rail-kicker">App</span><h1>{selectedCreatorApp.name}</h1><p>{selectedCreatorApp.valueProposition}</p></div><button type="button" className="button primary" onClick={() => setCreatorView("pack")}>Open workspace</button></div>
+            <div className="dashboard-header"><div><span className="rail-kicker">App</span><h1>{selectedCreatorApp.name}</h1><p>{selectedCreatorApp.valueProposition}</p></div><button type="button" className="button primary" disabled={!selectedCreatorApp.packs.length} onClick={() => setCreatorView("pack")}>Open workspace</button></div>
             <form className="new-pack-card" onSubmit={createCreatorPack}>
               <h2>New screenshot pack</h2>
               <div className="grid four">
@@ -594,12 +594,31 @@ export default function HomePage() {
               </div>
               <button className="button primary">Create pack</button>
             </form>
-            <div className="pack-list">{selectedCreatorApp.packs.length === 0 ? <div className="empty-state"><b>No packs yet</b><p>Create a pack for iPhone, iPad, Android or a localization campaign.</p></div> : selectedCreatorApp.packs.map((pack) => <button type="button" className="pack-row" key={pack.id} onClick={() => { setSelectedCreatorPackId(pack.id); setCreatorView("pack"); }}><b>{pack.name}</b><span>{pack.platform} · {pack.size} · {pack.screenCount} screens</span><small>{pack.locales.map((locale) => `${locale.code}: ${locale.status}`).join(" · ")}</small></button>)}</div>
+            <section className="pack-library" aria-label="Packs for this app">
+                  <div className="section-heading"><div><span className="rail-kicker">Packs</span><h2>Campaigns for {selectedCreatorApp.name}</h2></div><small>{selectedCreatorApp.packs.length} total</small></div>
+                  <div className="pack-tag-list">{selectedCreatorApp.packs.length === 0 ? <div className="empty-state"><b>No packs yet</b><p>Create a pack for iPhone, iPad, Android or a localization campaign.</p></div> : selectedCreatorApp.packs.map((pack, index) => {
+                    const summary = packSummary(pack);
+                    return <button type="button" className={pack.id === selectedCreatorPack?.id ? "pack-tag active" : "pack-tag"} key={pack.id} onClick={() => { setSelectedCreatorPackId(pack.id); setCreatorView("pack"); }}><b>{pack.name || `Pack ${index + 1}`}</b><span>{summary.primary}</span><small>{summary.secondary}</small></button>;
+                  })}</div>
+                  <div className="pack-list">{selectedCreatorApp.packs.map((pack) => {
+                    const summary = packSummary(pack);
+                    return <button type="button" className="pack-row" key={pack.id} onClick={() => { setSelectedCreatorPackId(pack.id); setCreatorView("pack"); }}><b>{pack.name}</b><span>{pack.platform} · {pack.size} · {pack.screenCount} screens</span><small>{summary.secondary}</small><div className="locale-status-list">{pack.locales.map((locale) => <span className={localeBadgeClass(locale)} key={locale.code}>{locale.code}: {locale.status}</span>)}</div></button>;
+                  })}</div>
+                </section>
           </div>
         )}
 
         {creatorView === "pack" && (
           <div className="pack-product-view">
+            {selectedCreatorApp && (
+              <section className="pack-context-bar" aria-label="Pack switcher">
+                <div><span className="rail-kicker">{selectedCreatorApp.name}</span><h2>{selectedCreatorPack?.name ?? "No pack selected"}</h2>{selectedCreatorPack && <p>{packSummary(selectedCreatorPack).secondary}</p>}</div>
+                <div className="pack-tag-list compact">{selectedCreatorApp.packs.map((pack, index) => {
+                  const summary = packSummary(pack);
+                  return <button type="button" className={pack.id === selectedCreatorPack?.id ? "pack-tag active" : "pack-tag"} key={pack.id} onClick={() => setSelectedCreatorPackId(pack.id)}><b>{pack.name || `Pack ${index + 1}`}</b><span>{summary.primary}</span></button>;
+                })}</div>
+              </section>
+            )}
             <AiDirectPackPlanner loading={aiDirectPackLoading} error={aiDirectPackError} result={aiDirectPackResult} onSubmit={onAiImageDirectPackSubmit} persistedFalKey={creatorSettings.falKey} app={selectedCreatorApp} pack={selectedCreatorPack} onWorkspaceAppsChange={setCreatorApps} />
             <details className="legacy-workflow" id="single-image"><summary>Single image generator</summary><AiImageDirectPanel loading={aiDirectLoading} error={aiDirectError} result={aiDirectResult} onSubmit={onAiImageDirectSubmit} /></details>
           </div>
@@ -633,6 +652,24 @@ function formatShortDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "unknown";
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function packSummary(pack: CreatorPack): { primary: string; secondary: string } {
+  const approved = pack.locales.reduce((total, locale) => total + (locale.screens?.filter((screen) => screen.status === "Approved").length ?? 0), 0);
+  const totalScreens = Math.max(1, pack.screenCount * Math.max(1, pack.locales.length));
+  const translated = pack.locales.filter((locale) => locale.code !== "en-US" && locale.status !== "Not translated").length;
+  const localeSummary = pack.locales.map((locale) => `${locale.code} ${locale.status.toLowerCase()}`).join(" · ");
+  return {
+    primary: `${pack.platform} · ${pack.screenCount} screens · ${approved}/${totalScreens} approved`,
+    secondary: `${translated}/${Math.max(0, pack.locales.length - 1)} translated · ${localeSummary || "No locales yet"}`,
+  };
+}
+
+function localeBadgeClass(locale: CreatorPack["locales"][number]): string {
+  const normalized = locale.status.toLowerCase();
+  if (normalized.includes("translated") || normalized.includes("approved")) return "locale-badge done";
+  if (normalized.includes("needs")) return "locale-badge warning";
+  return "locale-badge";
 }
 
 function generationModeIssueFor(params: { generationMode: "deterministic" | "premium-direct"; provider: string; openaiApiKey: string }): string | undefined {
