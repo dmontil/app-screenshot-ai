@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { analyzeLandingPage, approveCreatorWorkspaceScreen, updateCreatorWorkspaceLocaleScreens, type CreatorWorkspaceApp } from "./api-client";
 import { approvePackScreen, buildPackZipEntries, translatePackCopy, type PackScreenApproval } from "./pack-workspace-actions";
+import { buildInitialPackScreens, platformPresets, type PackPlatform, type PackScreen } from "./pack-planner-model";
 import { StatusBanner } from "./status";
 import type { LandingPageAnalysis } from "./types";
 
@@ -29,33 +30,6 @@ type AiDirectPackPlannerProps = {
   onWorkspaceAppsChange?: (apps: CreatorWorkspaceApp[]) => void;
 };
 
-
-type PackPlatform = "iphone" | "ipad" | "android-phone" | "android-tablet";
-
-type PackScreen = {
-  index: number;
-  sceneType: "cover" | "feature";
-  headline: string;
-  subheadline: string;
-  status?: "Draft" | "Approved";
-  approvedAt?: string;
-};
-
-const platformPresets: Record<PackPlatform, { label: string; width: number; height: number; store: string }> = {
-  iphone: { label: "iPhone", width: 1320, height: 2868, store: "App Store" },
-  ipad: { label: "iPad", width: 2048, height: 2732, store: "App Store" },
-  "android-phone": { label: "Android phone", width: 1080, height: 1920, store: "Google Play" },
-  "android-tablet": { label: "Android tablet", width: 1600, height: 2560, store: "Google Play" },
-};
-
-function buildInitialPackScreens(count: number): PackScreen[] {
-  return Array.from({ length: count }, (_, index) => ({
-    index: index + 1,
-    sceneType: index === 0 ? "cover" : "feature",
-    headline: "",
-    subheadline: "",
-  }));
-}
 
 export function AiDirectPackPlanner(props: AiDirectPackPlannerProps) {
   const [platform, setPlatform] = useState<PackPlatform>("iphone");
