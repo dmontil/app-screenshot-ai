@@ -4,8 +4,8 @@ import path from "node:path";
 import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-session";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { createModelGateway, type SupportedProvider } from "@app-screenshot-ai/model-gateway";
-import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
-import { AppInputSchema, type AppInput, type RawScreenshot } from "@app-screenshot-ai/schemas";
+import { createDefaultPremiumRecipeLibrary, PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import { AppInputSchema, getStandardStyleReference, STANDARD_STYLE_REFERENCES, type AppInput, type RawScreenshot, type StandardStyleReference } from "@app-screenshot-ai/schemas";
 
 export const runtime = "nodejs";
 
@@ -18,8 +18,10 @@ export async function POST(request: Request) {
     const uploadDir = path.join(root, ".local", "projects", projectId, "input", "screenshots");
     await mkdir(uploadDir, { recursive: true });
 
-    const screenshots = await persistScreenshots(form, uploadDir, projectId);
+    const uploadedScreenshots = await persistScreenshots(form, uploadDir, projectId);
+    const screenshots = uploadedScreenshots.length > 0 ? uploadedScreenshots : await readStoredScreenshots(root, projectId);
     const input = buildInput(form, screenshots);
+    const styleReference = await readSelectedStyleReference({ form, root, provider });
 
     const geminiApiKey = readActualSecret(readString(form.get("geminiApiKey")), process.env.GEMINI_API_KEY);
     const openaiApiKey = readActualSecret(readString(form.get("openaiApiKey")), process.env.OPENAI_API_KEY);
@@ -34,6 +36,7 @@ export async function POST(request: Request) {
       store,
       modelGateway: gateway,
       patternLibrary: createDefaultPatternLibrary(),
+      premiumRecipeLibrary: createDefaultPremiumRecipeLibrary(),
       sourceScreenshotLoader: {
         async load(sourcePath) {
           return {
@@ -45,6 +48,10 @@ export async function POST(request: Request) {
     });
 
     const model = readString(form.get("model")) || defaultModelFor(provider);
+    const imageModel = readString(form.get("imageModel")) || defaultImageModelFor(provider);
+    const includeCoverScreen = readString(form.get("includeCoverScreen")) === "on";
+    const generationMode = readGenerationMode(form.get("generationMode"));
+    const premiumDirectCandidateCount = readPositiveInt(form.get("premiumDirectCandidateCount")) ?? 3;
     const result = await session.generateStorePack({
       projectId,
       input,
@@ -52,13 +59,25 @@ export async function POST(request: Request) {
       model,
       label: readString(form.get("generationLabel")) || "AI generation",
       target: { store: "app-store", device: "iphone-6.9", locale: input.baseLocale, width: 1320, height: 2868 },
+      styleReference,
+      ...(imageModel ? { imageModel } : {}),
+      includeCoverScreen,
+      generationMode,
+      premiumDirectCandidateCount,
     });
 
     return Response.json(toGenerateResponse(result));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return Response.json({ error: message }, { status: 400 });
+    const readinessIssues = readinessMessages(error);
+    return Response.json({ error: readinessIssues.length ? `${message} ${readinessIssues.join(" ")}` : message }, { status: 400 });
   }
+}
+
+function readinessMessages(error: unknown): string[] {
+  if (!error || typeof error !== "object" || !("readiness" in error)) return [];
+  const readiness = (error as { readiness?: { issues?: Array<{ message?: unknown }> } }).readiness;
+  return readiness?.issues?.map((issue) => typeof issue.message === "string" ? issue.message : "").filter(Boolean) ?? [];
 }
 
 function toGenerateResponse(result: Awaited<ReturnType<LocalProjectGenerationSession["generateStorePack"]>>) {
@@ -75,6 +94,15 @@ function toGenerateResponse(result: Awaited<ReturnType<LocalProjectGenerationSes
     visualSystem: result.visualSystem,
     storyboard: result.storyboard,
     exportManifest: result.exportManifest,
+    brandKit: result.brandKit,
+    productUnderstanding: result.productUnderstanding,
+    premiumRecipes: result.premiumRecipes,
+    premiumCandidates: result.premiumCandidates,
+    sceneSet: result.sceneSet,
+    input: result.input,
+    styleReference: result.styleReference,
+    generationMode: result.generationMode,
+    premiumDirect: result.premiumDirect,
     zip: {
       fileName: result.zip.fileName,
       dataUrl: `data:application/zip;base64,${Buffer.from(result.zip.bytes).toString("base64")}`,
@@ -106,6 +134,16 @@ function buildInput(form: FormData, screenshots: RawScreenshot[]): AppInput {
   });
 }
 
+async function readStoredScreenshots(root: string, projectId: string): Promise<RawScreenshot[]> {
+  try {
+    const raw = await readFile(path.join(root, ".local", "projects", projectId, "input", "metadata.json"), "utf8");
+    const input = AppInputSchema.parse(JSON.parse(raw));
+    return input.screenshots;
+  } catch {
+    return [];
+  }
+}
+
 async function persistScreenshots(form: FormData, uploadDir: string, projectId: string): Promise<RawScreenshot[]> {
   const files = form.getAll("screenshots").filter((value): value is File => value instanceof File && value.size > 0);
   const kinds = form.getAll("screenshotKinds").map(readString);
@@ -123,6 +161,19 @@ async function persistScreenshots(form: FormData, uploadDir: string, projectId: 
     });
   }
   return screenshots;
+}
+
+async function readSelectedStyleReference(params: { form: FormData; root: string; provider: SupportedProvider }): Promise<StandardStyleReference> {
+  const selectedId = readString(params.form.get("styleReferenceId"));
+  const reference = selectedId ? getStandardStyleReference(selectedId) : params.provider === "fixture" ? STANDARD_STYLE_REFERENCES[0] : undefined;
+  if (!reference) {
+    throw new Error("Choose one standard visual reference before generating.");
+  }
+  const bytes = await readFile(path.join(params.root, reference.path));
+  return {
+    ...reference,
+    imageBase64: Buffer.from(bytes).toString("base64"),
+  };
 }
 
 function createDefaultPatternLibrary(): PatternLibrary {
@@ -151,6 +202,17 @@ function readString(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readGenerationMode(value: FormDataEntryValue | null): "deterministic" | "premium-direct" | "benchmark" {
+  const mode = readString(value);
+  if (mode === "premium-direct" || mode === "benchmark") return mode;
+  return "deterministic";
+}
+
+function readPositiveInt(value: FormDataEntryValue | null): number | undefined {
+  const parsed = Number.parseInt(readString(value), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function readProvider(value: FormDataEntryValue | null): SupportedProvider {
   const provider = readString(value);
   if (provider === "gemini" || provider === "openai" || provider === "fixture") return provider;
@@ -170,8 +232,13 @@ function readActualSecret(formValue: string, envValue: string | undefined): stri
 
 function defaultModelFor(provider: SupportedProvider): string {
   if (provider === "gemini") return "gemini-2.5-flash";
-  if (provider === "openai") return "gpt-4.1-mini";
+  if (provider === "openai") return "gpt-4.1";
   return "fixture-v1";
+}
+
+function defaultImageModelFor(provider: SupportedProvider): string | undefined {
+  if (provider === "openai") return "gpt-image-2";
+  return undefined;
 }
 
 function slug(value: string): string {

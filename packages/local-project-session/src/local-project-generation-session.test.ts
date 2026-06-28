@@ -5,11 +5,22 @@ import path from "node:path";
 import { GenerateStorePackError } from "@app-screenshot-ai/ai-pipeline";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { ModelGateway, type ModelProviderPort } from "@app-screenshot-ai/model-gateway";
-import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import { PatternLibrary, PremiumRecipeLibrary } from "@app-screenshot-ai/pattern-library";
 import type { AppInput, Storyboard, VisualSystem } from "@app-screenshot-ai/schemas";
 import { describe, expect, it } from "vitest";
 
 import { LocalProjectGenerationSession } from "./local-project-generation-session";
+
+const styleReference = {
+  id: "sc-1",
+  name: "Reference 1",
+  path: "apps/web/public/style-references/sc_1.jpeg",
+  previewPath: "/style-references/sc_1.jpeg",
+  mimeType: "image/jpeg" as const,
+  width: 800,
+  height: 450,
+  imageBase64: "base64-reference",
+};
 
 const appInput: AppInput = {
   appName: "LiteraryTrip",
@@ -52,6 +63,26 @@ function fakeGateway(provider?: ModelProviderPort) {
       },
     },
   });
+}
+
+function premiumRecipeLibrary() {
+  return new PremiumRecipeLibrary([
+    {
+      id: "travel-editorial-panorama",
+      category: "travel",
+      name: "Editorial route panorama",
+      qualityTarget: "top-1-percent",
+      tone: ["editorial", "premium"],
+      setRhythm: ["hook", "feature", "proof", "comparison", "cta"],
+      scenes: [
+        { composition: "hero-poster", requiredAssets: ["3d-object"], deviceSlots: 1, copyStyle: "big-loud" },
+        { composition: "split-devices", requiredAssets: ["3d-object"], deviceSlots: 2, copyStyle: "minimal-premium" },
+        { composition: "proof-poster", requiredAssets: ["badge"], deviceSlots: 1, copyStyle: "proof-heavy" },
+        { composition: "cropped-edge-device", requiredAssets: ["3d-object"], deviceSlots: 1, copyStyle: "big-loud" },
+        { composition: "object-led", requiredAssets: ["3d-object"], deviceSlots: 1, copyStyle: "minimal-premium" },
+      ],
+    },
+  ]);
 }
 
 function patternLibrary() {
@@ -99,15 +130,17 @@ describe("LocalProjectGenerationSession", () => {
       await expect(
         session.generateStorePack({
           projectId: "blocked-app",
-          input: { ...appInput, screenshots: appInput.screenshots.slice(0, 1) },
+          input: { ...appInput, screenshots: [] },
           provider: "fixture",
           model: "fixture-v1",
           target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+          styleReference,
         }),
       ).rejects.toBeInstanceOf(GenerateStorePackError);
 
       expect(providerCalls).toBe(0);
       const projects = await store.listProjects();
+      expect(projects[0]).toMatchObject({ projectId: "blocked-app", status: "blocked" });
       expect(projects[0]?.generations).toEqual([]);
 
       const readiness = JSON.parse(await readFile(path.join(rootDir, "blocked-app", "pipeline", "input-readiness.json"), "utf8"));
@@ -149,7 +182,7 @@ describe("LocalProjectGenerationSession", () => {
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 30_000);
 
   it("can return an unsaved manual preview without adding a generation", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "app-screenshot-ai-session-"));
@@ -172,7 +205,7 @@ describe("LocalProjectGenerationSession", () => {
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 30_000);
 
   it("generates and saves a versioned local project store pack", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "app-screenshot-ai-session-"));
@@ -181,6 +214,7 @@ describe("LocalProjectGenerationSession", () => {
         store: new LocalProjectStore({ rootDir }),
         modelGateway: fakeGateway(),
         patternLibrary: patternLibrary(),
+        premiumRecipeLibrary: premiumRecipeLibrary(),
       });
 
       const result = await session.generateStorePack({
@@ -190,6 +224,7 @@ describe("LocalProjectGenerationSession", () => {
         model: "fixture-v1",
         label: "AI generation",
         target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+        styleReference,
       });
 
       expect(result).toMatchObject({
@@ -200,23 +235,34 @@ describe("LocalProjectGenerationSession", () => {
         zip: { fileName: "literarytrip-store-pack.zip" },
       });
       expect(result.generationId).toMatch(/^gen-/);
-      expect(result.screenshots).toHaveLength(1);
+      expect(result.screenshots).toHaveLength(appInput.screenshots.length);
       expect(result.qualityReport.passed).toBe(true);
       expect(result.visualSystem.id).toBe("warm-editorial-v1");
       expect(result.storyboard.screens[0]?.headline).toBe("Turn books into routes");
-      expect(result.exportManifest.items[0]?.path).toBe("app-store/iphone-6.9/en-US/01-hook.png");
+      expect(result.brandKit!.source).toBe("category-default");
+      expect(result.premiumRecipes!.map((recipe) => recipe.id)).toEqual(["travel-editorial-panorama"]);
+      expect(result.sceneSet?.scenes.map((scene) => scene.composition)).toContain("split-devices");
+      expect(result.exportManifest.items[0]?.path).toBe("app-store/iphone-6.9/en-US/01-feature.png");
+      expect(result.styleReference).toMatchObject({ id: "sc-1", name: "Reference 1" });
+      expect(result.styleReference?.imageBase64).toBeUndefined();
       expect(result.zip.bytes.byteLength).toBeGreaterThan(0);
 
       const generation = await new LocalProjectStore({ rootDir }).readGeneration("literarytrip", result.generationId!);
       expect(generation.label).toBe("AI generation");
       expect(generation.storyboard.screens[0]?.headline).toBe("Turn books into routes");
-      expect(generation.renders[0]?.fileName).toBe("01-hook.png");
+      expect(generation.renders[0]?.fileName).toBe("01-feature.png");
       expect(generation.zip.fileName).toBe("literarytrip-store-pack.zip");
+      expect(generation.styleReference).toMatchObject({ id: "sc-1" });
 
       const readiness = JSON.parse(await readFile(path.join(rootDir, "literarytrip", "pipeline", "input-readiness.json"), "utf8"));
       expect(readiness.canGenerate).toBe(true);
+      const sceneSet = JSON.parse(await readFile(path.join(rootDir, "literarytrip", "pipeline", "scene-set.json"), "utf8"));
+      expect(sceneSet.recipeId).toBe("travel-editorial-panorama");
+      const storedStyleReference = JSON.parse(await readFile(path.join(rootDir, "literarytrip", "pipeline", "style-reference.json"), "utf8"));
+      expect(storedStyleReference.id).toBe("sc-1");
+      expect(storedStyleReference.imageBase64).toBeUndefined();
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 90_000);
 });

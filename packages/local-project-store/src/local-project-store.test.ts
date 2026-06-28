@@ -6,6 +6,16 @@ import { describe, expect, it } from "vitest";
 
 import { LocalProjectStore } from "./local-project-store";
 
+const styleReference = {
+  id: "sc-1",
+  name: "Reference 1",
+  path: "apps/web/public/style-references/sc_1.jpeg",
+  previewPath: "/style-references/sc_1.jpeg",
+  mimeType: "image/jpeg" as const,
+  width: 800,
+  height: 450,
+};
+
 const appInput = {
   appName: "LiteraryTrip",
   category: "travel",
@@ -30,7 +40,7 @@ async function withTempStore<T>(fn: (store: LocalProjectStore, rootDir: string) 
 }
 
 describe("LocalProjectStore", () => {
-  it("creates a project folder with input metadata", async () => {
+  it("creates a project folder with input metadata and project metadata", async () => {
     await withTempStore(async (store, rootDir) => {
       const project = await store.createProject({ projectId: "literarytrip", input: appInput });
 
@@ -39,6 +49,16 @@ describe("LocalProjectStore", () => {
 
       const storedInput = JSON.parse(await readFile(path.join(project.projectDir, "input", "metadata.json"), "utf8"));
       expect(storedInput.appName).toBe("LiteraryTrip");
+
+      const metadata = JSON.parse(await readFile(path.join(project.projectDir, "project.json"), "utf8"));
+      expect(metadata).toMatchObject({
+        projectId: "literarytrip",
+        appName: "LiteraryTrip",
+        category: "travel",
+        status: "draft",
+      });
+      expect(Date.parse(metadata.createdAt)).not.toBeNaN();
+      expect(Date.parse(metadata.updatedAt)).not.toBeNaN();
     });
   });
 
@@ -60,7 +80,7 @@ describe("LocalProjectStore", () => {
   });
 
   it("writes every generated set as a versioned generation", async () => {
-    await withTempStore(async (store) => {
+    await withTempStore(async (store, rootDir) => {
       await store.createProject({ projectId: "literarytrip", input: appInput });
 
       const generation = await store.writeGeneration({
@@ -80,18 +100,31 @@ describe("LocalProjectStore", () => {
         exportManifest: { items: [] },
         zipFileName: "literarytrip-store-pack.zip",
         zipBytes: new Uint8Array([4, 5, 6]),
+        styleReference,
       });
 
       expect(generation).toMatchObject({ generationId: "gen-a", kind: "ai-generate", label: "first variant" });
 
       const projects = await store.listProjects();
-      expect(projects[0]).toMatchObject({ projectId: "literarytrip", appName: "LiteraryTrip", currentGenerationId: "gen-a" });
+      expect(projects[0]).toMatchObject({
+        projectId: "literarytrip",
+        appName: "LiteraryTrip",
+        category: "travel",
+        status: "ready",
+        currentGenerationId: "gen-a",
+      });
       expect(projects[0]?.generations).toHaveLength(1);
+
+      const metadata = JSON.parse(await readFile(path.join(rootDir, "literarytrip", "project.json"), "utf8"));
+      expect(metadata).toMatchObject({ status: "ready", currentGenerationId: "gen-a" });
 
       const storedGeneration = await store.readGeneration("literarytrip", "gen-a");
       expect(storedGeneration.storyboard.screens[0]?.headline).toBe("Walk books");
       expect(storedGeneration.renders[0]?.bytes).toEqual(new Uint8Array([1, 2, 3]));
       expect(storedGeneration.zip.bytes).toEqual(new Uint8Array([4, 5, 6]));
+      expect(storedGeneration.styleReference).toMatchObject({ id: "sc-1", name: "Reference 1" });
+      const storedStyleReference = JSON.parse(await readFile(path.join(rootDir, "literarytrip", "generations", "gen-a", "style-reference.json"), "utf8"));
+      expect(storedStyleReference.id).toBe("sc-1");
     });
   });
 
@@ -118,6 +151,19 @@ describe("LocalProjectStore", () => {
       const generation = await store.readGeneration("old-project", "legacy");
       expect(generation.storyboard.screens[0]?.headline).toBe("Legacy");
       expect(generation.renders[0]?.bytes).toEqual(new Uint8Array([1]));
+    });
+  });
+
+  it("updates project status metadata and sorts projects by recent activity", async () => {
+    await withTempStore(async (store) => {
+      await store.createProject({ projectId: "older-app", input: { ...appInput, appName: "Older App" } });
+      await store.createProject({ projectId: "blocked-app", input: { ...appInput, appName: "Blocked App" } });
+
+      await store.updateProjectMetadata({ projectId: "blocked-app", patch: { status: "blocked" } });
+
+      const projects = await store.listProjects();
+      expect(projects[0]).toMatchObject({ projectId: "blocked-app", appName: "Blocked App", status: "blocked" });
+      expect(projects[1]).toMatchObject({ projectId: "older-app", status: "draft" });
     });
   });
 

@@ -4,21 +4,21 @@ export class CheckInputReadinessUseCase {
   async execute(input: AppInput): Promise<InputReadinessReport> {
     const issues: ReadinessIssue[] = [];
 
-    if (input.screenshots.length < 3) {
+    if (input.screenshots.length < 1) {
       issues.push({
         code: "too_few_screenshots",
         severity: "error",
-        message: "Upload at least 3 distinct in-app screenshots.",
+        message: "Upload at least 1 in-app screenshot.",
       });
     }
 
     const functionalScreenshotCount = input.screenshots.filter((screenshot) => screenshot.kind === "functional").length;
 
-    if (functionalScreenshotCount < 2) {
+    if (functionalScreenshotCount < 1) {
       issues.push({
         code: "too_few_functional_screenshots",
         severity: "error",
-        message: "Upload at least 2 screenshots with functional in-app UI visible.",
+        message: "Upload at least 1 screenshot with functional in-app UI visible.",
       });
     }
 

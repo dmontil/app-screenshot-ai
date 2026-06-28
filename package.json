@@ -11,7 +11,9 @@
   "scripts": {
     "dev": "npm run dev --workspace @app-screenshot-ai/web",
     "demo:literarytrip": "tsx scripts/demo-literarytrip.ts",
+    "benchmark:quality": "tsx scripts/benchmark-quality.ts",
     "generate": "tsx scripts/generate-project.ts",
+    "test:ai-direct-pack": "tsx --env-file=.env.local scripts/test-ai-direct-pack.ts",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"

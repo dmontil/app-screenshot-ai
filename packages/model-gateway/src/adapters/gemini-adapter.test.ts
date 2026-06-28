@@ -44,6 +44,29 @@ describe("GeminiAdapter", () => {
     });
   });
 
+  it("sends the selected style reference image as an inline multimodal part", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const adapter = new GeminiAdapter({
+      apiKey: "gemini-key",
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), init: init ?? {} });
+        return jsonResponse({ candidates: [{ content: { parts: [{ text: JSON.stringify({ id: "visual-system" }) }] } }] });
+      },
+    });
+
+    await adapter.generateObject({
+      model: "gemini-2.5-flash",
+      task: "visual-system.generate",
+      input: { styleReference: { id: "sc-1", mimeType: "image/jpeg", imageBase64: "abc123" } },
+    });
+
+    const body = JSON.parse(String(calls[0]?.init.body));
+    expect(body.contents[0].parts).toEqual([
+      expect.objectContaining({ text: expect.stringContaining('"imageBase64": "[attached reference image]"') }),
+      { inline_data: { mime_type: "image/jpeg", data: "abc123" } },
+    ]);
+  });
+
   it("normalizes quota errors", async () => {
     const adapter = new GeminiAdapter({
       apiKey: "gemini-key",

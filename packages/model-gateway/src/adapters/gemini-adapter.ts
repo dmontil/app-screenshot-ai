@@ -1,5 +1,5 @@
 import { ModelGatewayError, type ModelProviderPort } from "../model-gateway";
-import { buildStructuredObjectPrompt, parseStructuredJsonText, requireStructuredText } from "./structured-provider-request";
+import { buildStructuredObjectPrompt, extractStyleReferenceImage, parseStructuredJsonText, requireStructuredText } from "./structured-provider-request";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -34,6 +34,8 @@ export class GeminiAdapter implements ModelProviderPort {
 
   async generateObject(params: { model: string; task: string; input: unknown }): Promise<unknown> {
     const url = `${GEMINI_API_BASE}/models/${params.model}:generateContent?key=${this.apiKey}`;
+    const prompt = buildStructuredObjectPrompt(params.task, params.input);
+    const styleReferenceImage = extractStyleReferenceImage(params.input);
     const response = await this.fetchImpl(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -41,9 +43,17 @@ export class GeminiAdapter implements ModelProviderPort {
         contents: [
           {
             parts: [
-              {
-                text: buildStructuredObjectPrompt(params.task, params.input),
-              },
+              { text: prompt },
+              ...(styleReferenceImage
+                ? [
+                    {
+                      inline_data: {
+                        mime_type: styleReferenceImage.mimeType,
+                        data: styleReferenceImage.imageBase64,
+                      },
+                    },
+                  ]
+                : []),
             ],
           },
         ],

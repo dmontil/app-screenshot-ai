@@ -1,13 +1,13 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import sharp from "sharp";
-
 import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-session";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { ModelGateway } from "@app-screenshot-ai/model-gateway";
-import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
-import { AppInputSchema, type AppInput } from "@app-screenshot-ai/schemas";
+import { createDefaultPremiumRecipeLibrary, PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import { AppInputSchema, getStandardStyleReference, type AppInput, type StandardStyleReference } from "@app-screenshot-ai/schemas";
+
+import { writeLiteraryTripSourceScreenshots } from "./literarytrip-fixtures";
 
 const root = process.cwd();
 const exampleDir = path.join(root, "examples", "literarytrip");
@@ -16,15 +16,17 @@ const outputDir = path.join(exampleDir, "output");
 async function main() {
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(path.join(outputDir, "screenshots"), { recursive: true });
-  await writeDemoSourceScreenshots();
+  await writeLiteraryTripSourceScreenshots(exampleDir);
 
   const metadata = JSON.parse(await readFile(path.join(exampleDir, "input", "metadata.json"), "utf8")) as unknown;
   const input: AppInput = AppInputSchema.parse(metadata);
+  const styleReference = await loadStyleReference("sc-1");
 
   const session = new LocalProjectGenerationSession({
     store: new LocalProjectStore({ rootDir: path.join(root, ".local", "projects") }),
     modelGateway: createLiteraryTripFixtureGateway(),
     patternLibrary: createLiteraryTripPatternLibrary(),
+    premiumRecipeLibrary: createDefaultPremiumRecipeLibrary(),
     sourceScreenshotLoader: {
       async load(sourcePath) {
         return {
@@ -42,12 +44,14 @@ async function main() {
     model: "fixture-v1",
     label: "LiteraryTrip demo",
     target: { store: "app-store", device: "iphone-6.9", locale: "en-US", width: 1320, height: 2868 },
+    styleReference,
   });
 
   await writeJson("visual-system.json", result.visualSystem);
   await writeJson("storyboard.json", result.storyboard);
   await writeJson("quality-report.json", result.qualityReport);
   await writeJson("export-manifest.json", result.exportManifest);
+  await writeJson("style-reference.json", withoutImagePayload(styleReference));
 
   for (const asset of result.screenshots) {
     await writeFile(path.join(outputDir, "screenshots", asset.fileName), asset.bytes);
@@ -56,6 +60,19 @@ async function main() {
   await writeFile(path.join(outputDir, "literarytrip-store-pack.zip"), result.zip.bytes);
 
   console.log(`Generated ${result.screenshots.length} screenshots in ${path.relative(root, outputDir)}`);
+}
+
+function withoutImagePayload(reference: StandardStyleReference): StandardStyleReference {
+  const metadata = { ...reference };
+  delete metadata.imageBase64;
+  return metadata;
+}
+
+async function loadStyleReference(styleReferenceId: string): Promise<StandardStyleReference> {
+  const reference = getStandardStyleReference(styleReferenceId);
+  if (!reference) throw new Error(`Unknown standard style reference '${styleReferenceId}'.`);
+  const bytes = await readFile(path.join(root, reference.path));
+  return { ...reference, imageBase64: Buffer.from(bytes).toString("base64") };
 }
 
 function createLiteraryTripFixtureGateway(): ModelGateway {
@@ -103,31 +120,6 @@ function createLiteraryTripPatternLibrary(): PatternLibrary {
       whyItWorks: ["The app UI remains dominant.", "The warm editorial tone matches literary discovery."],
     },
   ]);
-}
-
-async function writeDemoSourceScreenshots() {
-  const screenshotsDir = path.join(exampleDir, "input", "screenshots");
-  await mkdir(screenshotsDir, { recursive: true });
-
-  await Promise.all([
-    writeDemoPhoneScreen(path.join(screenshotsDir, "home.png"), "Find a book", "#F7F1E7", "#3B2416"),
-    writeDemoPhoneScreen(path.join(screenshotsDir, "search.png"), "Paris routes", "#EFE7D7", "#7C4A1D"),
-    writeDemoPhoneScreen(path.join(screenshotsDir, "map.png"), "Story map", "#E7EFE7", "#3E4D2C"),
-  ]);
-}
-
-async function writeDemoPhoneScreen(filePath: string, title: string, background: string, accent: string) {
-  const svg = `<svg width="390" height="844" viewBox="0 0 390 844" xmlns="http://www.w3.org/2000/svg">
-    <rect width="390" height="844" fill="${background}" />
-    <text x="32" y="92" font-family="Arial" font-size="34" font-weight="700" fill="#24160F">${title}</text>
-    <rect x="28" y="136" width="334" height="56" rx="22" fill="#FFFFFF" />
-    <rect x="28" y="226" width="334" height="180" rx="28" fill="${accent}" opacity="0.22" />
-    <rect x="52" y="456" width="286" height="78" rx="24" fill="#FFFFFF" />
-    <rect x="52" y="558" width="220" height="28" rx="14" fill="${accent}" opacity="0.32" />
-    <rect x="52" y="610" width="250" height="28" rx="14" fill="${accent}" opacity="0.22" />
-  </svg>`;
-
-  await writeFile(filePath, await sharp(Buffer.from(svg)).png().toBuffer());
 }
 
 async function writeJson(fileName: string, value: unknown) {

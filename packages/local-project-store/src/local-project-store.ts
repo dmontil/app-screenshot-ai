@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { AppInput, ExportManifest, QualityReport, RenderedAsset, Storyboard, VisualSystem } from "@app-screenshot-ai/schemas";
+import type { AppInput, ExportManifest, QualityReport, RenderedAsset, StandardStyleReference, Storyboard, VisualSystem } from "@app-screenshot-ai/schemas";
 
 export type LocalProjectStoreOptions = {
   rootDir: string;
@@ -51,6 +51,7 @@ export type WriteGenerationParams = {
   exportManifest: ExportManifest;
   zipFileName: string;
   zipBytes: Uint8Array;
+  styleReference?: StandardStyleReference;
 };
 
 export type StoredGeneration = GenerationSummary & {
@@ -60,12 +61,38 @@ export type StoredGeneration = GenerationSummary & {
   exportManifest: ExportManifest;
   renders: Array<{ fileName: string; bytes: Uint8Array }>;
   zip: { fileName: string; bytes: Uint8Array };
+  styleReference?: StandardStyleReference;
+};
+
+export type ProjectStatus = "draft" | "ready" | "blocked" | "exported";
+
+export type ProjectMetadata = {
+  projectId: string;
+  appName?: string;
+  category?: string;
+  createdAt: string;
+  updatedAt: string;
+  status: ProjectStatus;
+  currentGenerationId?: string;
+  favoriteGenerationId?: string;
+  lastExportedAt?: string;
+};
+
+export type UpdateProjectMetadataParams = {
+  projectId: string;
+  patch: Partial<Omit<ProjectMetadata, "projectId" | "createdAt">>;
 };
 
 export type ProjectSummary = {
   projectId: string;
   appName?: string;
+  category?: string;
+  status: ProjectStatus;
+  createdAt: string;
+  updatedAt: string;
   currentGenerationId?: string;
+  favoriteGenerationId?: string;
+  lastExportedAt?: string;
   generations: GenerationSummary[];
 };
 
@@ -85,6 +112,7 @@ export class LocalProjectStore {
     await mkdir(path.join(projectDir, "generations"), { recursive: true });
 
     await writeJson(path.join(projectDir, "input", "metadata.json"), params.input);
+    await this.ensureProjectMetadata(params.projectId, params.input);
 
     return { projectId: params.projectId, projectDir };
   }
@@ -105,6 +133,28 @@ export class LocalProjectStore {
     const exportsDir = path.join(this.projectDir(params.projectId), "exports");
     await mkdir(exportsDir, { recursive: true });
     await writeFile(path.join(exportsDir, params.fileName), params.bytes);
+  }
+
+  async updateProjectMetadata(params: UpdateProjectMetadataParams): Promise<ProjectMetadata> {
+    const projectId = safePathSegment(params.projectId);
+    const projectDir = this.projectDir(projectId);
+    await mkdir(projectDir, { recursive: true });
+    const current = await this.readProjectMetadata(projectId);
+    const now = new Date().toISOString();
+    const next: ProjectMetadata = {
+      projectId,
+      createdAt: current?.createdAt ?? now,
+      updatedAt: now,
+      status: current?.status ?? "draft",
+      ...(current?.appName ? { appName: current.appName } : {}),
+      ...(current?.category ? { category: current.category } : {}),
+      ...(current?.currentGenerationId ? { currentGenerationId: current.currentGenerationId } : {}),
+      ...(current?.favoriteGenerationId ? { favoriteGenerationId: current.favoriteGenerationId } : {}),
+      ...(current?.lastExportedAt ? { lastExportedAt: current.lastExportedAt } : {}),
+      ...params.patch,
+    };
+    await writeJson(path.join(projectDir, "project.json"), next);
+    return next;
   }
 
   async writeGeneration(params: WriteGenerationParams): Promise<GenerationSummary> {
@@ -128,11 +178,16 @@ export class LocalProjectStore {
     await writeJson(path.join(generationDir, "storyboard.json"), params.storyboard);
     await writeJson(path.join(generationDir, "quality-report.json"), params.qualityReport);
     await writeJson(path.join(generationDir, "export-manifest.json"), params.exportManifest);
+    if (params.styleReference) await writeJson(path.join(generationDir, "style-reference.json"), params.styleReference);
     await writeFile(path.join(exportsDir, params.zipFileName), params.zipBytes);
     for (const asset of params.assets) {
       await writeFile(path.join(rendersDir, asset.fileName), asset.bytes);
     }
     await writeJson(path.join(this.projectDir(params.projectId), "current-generation.json"), summary);
+    await this.updateProjectMetadata({
+      projectId: params.projectId,
+      patch: { status: "ready", currentGenerationId: generationId },
+    });
     return summary;
   }
 
@@ -142,7 +197,7 @@ export class LocalProjectStore {
     const projects = await Promise.all(
       entries.filter((entry) => entry.isDirectory()).map(async (entry) => this.readProjectSummary(entry.name)),
     );
-    return projects.sort((a, b) => (b.generations[0]?.createdAt ?? "").localeCompare(a.generations[0]?.createdAt ?? ""));
+    return projects.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   async readGeneration(projectId: string, generationId: string): Promise<StoredGeneration> {
@@ -155,6 +210,7 @@ export class LocalProjectStore {
     const storyboard = JSON.parse(await readFile(path.join(generationDir, "storyboard.json"), "utf8")) as Storyboard;
     const qualityReport = JSON.parse(await readFile(path.join(generationDir, "quality-report.json"), "utf8")) as QualityReport;
     const exportManifest = JSON.parse(await readFile(path.join(generationDir, "export-manifest.json"), "utf8")) as ExportManifest;
+    const styleReference = await readOptionalJson<StandardStyleReference>(path.join(generationDir, "style-reference.json"));
     const renderFileNames = await readdir(path.join(generationDir, "renders"));
     const renders = await Promise.all(
       renderFileNames.sort().map(async (fileName) => ({
@@ -172,6 +228,7 @@ export class LocalProjectStore {
       exportManifest,
       renders,
       zip: { fileName: zipFileName, bytes: new Uint8Array(await readFile(path.join(generationDir, "exports", zipFileName))) },
+      ...(styleReference ? { styleReference } : {}),
     };
   }
 
@@ -181,6 +238,7 @@ export class LocalProjectStore {
     const storyboard = await readRequiredJson<Storyboard>(path.join(projectDir, "pipeline", "storyboard.json"));
     const qualityReport = await readRequiredJson<QualityReport>(path.join(projectDir, "pipeline", "quality-report.json"));
     const exportManifest = await readRequiredJson<ExportManifest>(path.join(projectDir, "pipeline", "export-manifest.json"));
+    const styleReference = await readOptionalJson<StandardStyleReference>(path.join(projectDir, "pipeline", "style-reference.json"));
     const renderFileNames = await readdir(path.join(projectDir, "renders"));
     const renders = await Promise.all(
       renderFileNames.filter((fileName) => fileName.endsWith(".png")).sort().map(async (fileName) => ({
@@ -202,12 +260,14 @@ export class LocalProjectStore {
       exportManifest,
       renders,
       zip: { fileName: zipFileName, bytes: new Uint8Array(await readFile(path.join(projectDir, "exports", zipFileName))) },
+      ...(styleReference ? { styleReference } : {}),
     };
   }
 
   private async readProjectSummary(projectId: string): Promise<ProjectSummary> {
     const projectDir = this.projectDir(projectId);
     const input = await readOptionalJson<AppInput>(path.join(projectDir, "input", "metadata.json"));
+    const metadata = await this.readProjectMetadata(projectId);
     const current = await readOptionalJson<GenerationSummary>(path.join(projectDir, "current-generation.json"));
     const generationsDir = path.join(projectDir, "generations");
     await mkdir(generationsDir, { recursive: true });
@@ -229,12 +289,43 @@ export class LocalProjectStore {
         createdAt: "1970-01-01T00:00:00.000Z",
       });
     }
+    const fallbackCreatedAt = sortedGenerations[0]?.createdAt ?? "1970-01-01T00:00:00.000Z";
+    const currentGenerationId = metadata?.currentGenerationId ?? current?.generationId ?? sortedGenerations[0]?.generationId;
     return {
       projectId,
-      ...(input?.appName ? { appName: input.appName } : {}),
-      ...(current?.generationId ? { currentGenerationId: current.generationId } : sortedGenerations[0]?.generationId ? { currentGenerationId: sortedGenerations[0].generationId } : {}),
+      ...(metadata?.appName ? { appName: metadata.appName } : input?.appName ? { appName: input.appName } : {}),
+      ...(metadata?.category ? { category: metadata.category } : input?.category ? { category: input.category } : {}),
+      status: metadata?.status ?? (sortedGenerations.length ? "ready" : "draft"),
+      createdAt: metadata?.createdAt ?? fallbackCreatedAt,
+      updatedAt: metadata?.updatedAt ?? fallbackCreatedAt,
+      ...(currentGenerationId ? { currentGenerationId } : {}),
+      ...(metadata?.favoriteGenerationId ? { favoriteGenerationId: metadata.favoriteGenerationId } : {}),
+      ...(metadata?.lastExportedAt ? { lastExportedAt: metadata.lastExportedAt } : {}),
       generations: sortedGenerations,
     };
+  }
+
+  private async ensureProjectMetadata(projectId: string, input: AppInput): Promise<ProjectMetadata> {
+    const safeProjectId = safePathSegment(projectId);
+    const current = await this.readProjectMetadata(safeProjectId);
+    const now = new Date().toISOString();
+    const metadata: ProjectMetadata = {
+      projectId: safeProjectId,
+      createdAt: current?.createdAt ?? now,
+      updatedAt: now,
+      status: current?.status ?? "draft",
+      appName: input.appName,
+      category: input.category,
+      ...(current?.currentGenerationId ? { currentGenerationId: current.currentGenerationId } : {}),
+      ...(current?.favoriteGenerationId ? { favoriteGenerationId: current.favoriteGenerationId } : {}),
+      ...(current?.lastExportedAt ? { lastExportedAt: current.lastExportedAt } : {}),
+    };
+    await writeJson(path.join(this.projectDir(safeProjectId), "project.json"), metadata);
+    return metadata;
+  }
+
+  private async readProjectMetadata(projectId: string): Promise<ProjectMetadata | undefined> {
+    return readOptionalJson<ProjectMetadata>(path.join(this.projectDir(projectId), "project.json"));
   }
 
   private projectDir(projectId: string): string {

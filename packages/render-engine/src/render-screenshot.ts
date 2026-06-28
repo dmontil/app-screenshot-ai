@@ -160,19 +160,21 @@ function cinematicAtlasSvg(input: RenderScreenshotInput): string {
 
 function classicSvg(input: RenderScreenshotInput): string {
   const { target, visualSystem, screenPlan } = input;
-  const frame = phoneFrame(input, { y: visualSystem.layout.deviceY, widthRatio: visualSystem.layout.deviceWidthRatio, tilt: 0 });
+  const frame = phoneFrame(input, { y: visualSystem.layout.deviceY, widthRatio: visualSystem.layout.deviceWidthRatio, tilt: screenPlan.index % 2 === 0 ? -4 : 4 });
   const headlineStyle = textLayerStyle(input, "headline", { x: target.width / 2, y: visualSystem.layout.headlineY, fontSize: 112, fontWeight: visualSystem.typography.headlineWeight, maxCharsPerLine: 18, align: "middle" });
   const headlineLines = wrapWords(screenPlan.headline, headlineStyle.maxCharsPerLine).slice(0, 4);
 
   return svgShell(input, `
     <defs>${commonDefs(input, frame)}</defs>
     <rect width="100%" height="100%" fill="url(#classicBg)" />
+    ${renderUtilityBackdrop(input)}
     <circle cx="${target.width - 180}" cy="360" r="180" fill="${escapeXml(visualSystem.palette.accent)}" opacity="0.16" />
     <circle cx="140" cy="${target.height - 420}" r="260" fill="${escapeXml(visualSystem.palette.primary)}" opacity="0.10" />
     <text x="${headlineStyle.x}" y="${headlineStyle.y}" text-anchor="${headlineStyle.align}" font-family="${escapeXml(headlineStyle.fontFamily)}, Arial, sans-serif" font-size="${headlineStyle.fontSize}" font-weight="${headlineStyle.fontWeight}" fill="${escapeXml(visualSystem.palette.text)}" letter-spacing="-4">
       ${headlineLines.map((line, index) => `<tspan x="${headlineStyle.x}" dy="${index === 0 ? 0 : headlineStyle.fontSize + 6}">${escapeXml(line)}</tspan>`).join("")}
     </text>
-    ${renderPhone(input, frame)}
+    ${input.secondarySourceScreenshot ? renderSplitMockups(input, frame) : renderPhone(input, frame)}
+    ${renderFloating3dObjects(input)}
   `);
 }
 
@@ -233,6 +235,51 @@ function renderPanoramicMapBackground(input: RenderScreenshotInput, opacityScale
         return `<g opacity="${opacityScale}"><circle cx="${cx}" cy="${cy}" r="42" fill="${dark ? "#15111b" : "#fffaf2"}" stroke="${escapeXml(visualSystem.palette.accent)}" stroke-width="8"/><text x="${cx}" y="${cy + 12}" text-anchor="middle" font-family="Arial" font-weight="900" font-size="34" fill="${dark ? "#fff6df" : escapeXml(visualSystem.palette.text)}">${index + 1}</text></g>`;
       }).join("")}
     </g>
+  `;
+}
+
+function renderUtilityBackdrop(input: RenderScreenshotInput): string {
+  if (input.visualSystem.motif !== "cards" && input.visualSystem.layoutFamily !== "classic-device") return "";
+  const { target, visualSystem, screenPlan } = input;
+  const step = target.width / 4;
+  return `
+    <g opacity="0.9">
+      ${Array.from({ length: 9 }, (_, index) => {
+        const x = (index % 3) * step + 70;
+        const y = 460 + Math.floor(index / 3) * 430 + (screenPlan.index % 2) * 35;
+        return `<rect x="${x}" y="${y}" width="${step * 1.2}" height="190" rx="46" fill="#ffffff" opacity="0.28" stroke="${escapeXml(visualSystem.palette.accent)}" stroke-opacity="0.16"/>`;
+      }).join("")}
+      <path d="M 80 ${target.height * 0.72} C ${target.width * 0.35} ${target.height * 0.56}, ${target.width * 0.62} ${target.height * 0.88}, ${target.width - 90} ${target.height * 0.68}" fill="none" stroke="${escapeXml(visualSystem.palette.accent)}" stroke-width="10" stroke-linecap="round" stroke-dasharray="24 28" opacity="0.30" />
+    </g>
+  `;
+}
+
+function renderFloating3dObjects(input: RenderScreenshotInput): string {
+  if (input.visualSystem.motif !== "cards" && input.visualSystem.layoutFamily !== "classic-device") return "";
+  const { target, visualSystem, screenPlan } = input;
+  const objects = [
+    { x: target.width - 280, y: 520, s: 1, r: -8 },
+    { x: 130, y: target.height - 720, s: 0.82, r: 12 },
+    { x: target.width - 220, y: target.height - 420, s: 0.7, r: 18 },
+  ];
+  return objects.map((object, index) => `
+    <g transform="translate(${object.x}, ${object.y}) rotate(${object.r + screenPlan.index * 2}) scale(${object.s})" filter="url(#softShadow)" opacity="${index === 1 ? 0.82 : 0.92}">
+      <rect x="0" y="0" width="132" height="132" rx="28" fill="${escapeXml(index % 2 ? visualSystem.palette.primary : visualSystem.palette.accent)}" />
+      <path d="M 132 28 L 184 0 L 184 132 L 132 160 Z" fill="${escapeXml(visualSystem.palette.primary)}" opacity="0.86" />
+      <path d="M 28 132 L 132 132 L 184 132 L 132 160 L 0 160 Z" fill="#ffffff" opacity="0.35" />
+      <circle cx="66" cy="66" r="28" fill="#ffffff" opacity="0.42" />
+    </g>
+  `).join("");
+}
+
+function renderSplitMockups(input: RenderScreenshotInput, frame: Frame): string {
+  if (!input.secondarySourceScreenshot) return renderPhone(input, frame);
+  const leftFrame: Frame = { ...frame, x: Math.round(frame.x - frame.width * 0.28), width: Math.round(frame.width * 0.92), height: Math.round(frame.height * 0.92), tilt: -9 };
+  const rightFrame: Frame = { ...frame, x: Math.round(frame.x + frame.width * 0.36), y: Math.round(frame.y + 100), width: Math.round(frame.width * 0.82), height: Math.round(frame.height * 0.82), tilt: 8 };
+  const { secondarySourceScreenshot: _secondarySourceScreenshot, ...inputWithoutSecondary } = input;
+  return `
+    ${renderPhone(input, leftFrame)}
+    ${renderPhone({ ...inputWithoutSecondary, sourceScreenshot: input.secondarySourceScreenshot }, rightFrame)}
   `;
 }
 

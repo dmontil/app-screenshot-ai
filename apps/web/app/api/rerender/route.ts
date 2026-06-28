@@ -5,7 +5,7 @@ import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { ModelGateway } from "@app-screenshot-ai/model-gateway";
 import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
-import { StoryboardSchema, VisualSystemSchema } from "@app-screenshot-ai/schemas";
+import { StandardStyleReferenceSchema, StoryboardSchema, VisualSystemSchema } from "@app-screenshot-ai/schemas";
 
 export const runtime = "nodejs";
 
@@ -16,6 +16,7 @@ export async function POST(request: Request) {
     const locale = typeof body.locale === "string" && body.locale.trim() ? body.locale.trim() : "en-US";
     const visualSystem = VisualSystemSchema.parse(body.visualSystem);
     const storyboard = StoryboardSchema.parse(body.storyboard);
+    const styleReference = body.styleReference ? StandardStyleReferenceSchema.parse(body.styleReference) : undefined;
 
     const session = new LocalProjectGenerationSession({
       store: new LocalProjectStore({ rootDir: path.join(appRoot(), ".local", "projects") }),
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
       storyboard,
       label: typeof body.label === "string" && body.label.trim() ? body.label.trim() : "Manual rerender",
       persist: body.persist !== false,
+      ...(styleReference ? { styleReference } : {}),
     });
 
     return Response.json({
@@ -50,6 +52,7 @@ export async function POST(request: Request) {
       qualityReport: result.qualityReport,
       storyboard: result.storyboard,
       exportManifest: result.exportManifest,
+      styleReference: result.styleReference,
       zip: {
         fileName: result.zip.fileName,
         dataUrl: `data:application/zip;base64,${Buffer.from(result.zip.bytes).toString("base64")}`,

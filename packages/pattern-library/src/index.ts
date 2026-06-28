@@ -1,1 +1,1 @@
-export { PatternLibrary, type PatternRetrievalQuery } from "./pattern-library";
+export { createDefaultPremiumRecipeLibrary, PatternLibrary, PremiumRecipeLibrary, type PatternRetrievalQuery, type PremiumRecipeRetrievalQuery } from "./pattern-library";

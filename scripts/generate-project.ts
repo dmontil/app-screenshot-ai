@@ -4,16 +4,17 @@ import path from "node:path";
 import { LocalProjectGenerationSession } from "@app-screenshot-ai/local-project-session";
 import { LocalProjectStore } from "@app-screenshot-ai/local-project-store";
 import { createModelGatewayFromEnv } from "@app-screenshot-ai/model-gateway";
-import { PatternLibrary } from "@app-screenshot-ai/pattern-library";
-import { AppInputSchema } from "@app-screenshot-ai/schemas";
+import { createDefaultPremiumRecipeLibrary, PatternLibrary } from "@app-screenshot-ai/pattern-library";
+import { AppInputSchema, getStandardStyleReference, STANDARD_STYLE_REFERENCES, type StandardStyleReference } from "@app-screenshot-ai/schemas";
 
 const root = process.cwd();
 
-type CliArgs = { inputPath: string; projectId: string; outputDir: string };
+type CliArgs = { inputPath: string; projectId: string; outputDir: string; styleReferenceId: string; includeCoverScreen: boolean };
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const input = AppInputSchema.parse(JSON.parse(await readFile(args.inputPath, "utf8")) as unknown);
+  const styleReference = await loadStyleReference(args.styleReferenceId);
 
   await rm(args.outputDir, { recursive: true, force: true });
   await mkdir(path.join(args.outputDir, "screenshots"), { recursive: true });
@@ -23,6 +24,7 @@ async function main() {
     store: new LocalProjectStore({ rootDir: path.join(root, ".local", "projects") }),
     modelGateway: gateway,
     patternLibrary: createDefaultPatternLibrary(),
+    premiumRecipeLibrary: createDefaultPremiumRecipeLibrary(),
     sourceScreenshotLoader: {
       async load(sourcePath) {
         const absolutePath = path.isAbsolute(sourcePath) ? sourcePath : path.join(root, sourcePath);
@@ -41,12 +43,21 @@ async function main() {
     model,
     label: "CLI generation",
     target: { store: "app-store", device: "iphone-6.9", locale: input.baseLocale, width: 1320, height: 2868 },
+    styleReference,
+    ...(process.env.OPENAI_IMAGE_MODEL || provider === "openai" ? { imageModel: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1" } : {}),
+    includeCoverScreen: args.includeCoverScreen,
   });
 
   await writeJson(args.outputDir, "visual-system.json", result.visualSystem);
   await writeJson(args.outputDir, "storyboard.json", result.storyboard);
   await writeJson(args.outputDir, "quality-report.json", result.qualityReport);
   await writeJson(args.outputDir, "export-manifest.json", result.exportManifest);
+  if (result.brandKit) await writeJson(args.outputDir, "brand-kit.json", result.brandKit);
+  if (result.productUnderstanding) await writeJson(args.outputDir, "product-understanding.json", result.productUnderstanding);
+  if (result.premiumRecipes) await writeJson(args.outputDir, "premium-recipes.json", result.premiumRecipes);
+  if (result.premiumCandidates) await writeJson(args.outputDir, "premium-candidates.json", result.premiumCandidates);
+  if (result.sceneSet) await writeJson(args.outputDir, "scene-set.json", result.sceneSet);
+  await writeJson(args.outputDir, "style-reference.json", withoutImagePayload(styleReference));
 
   for (const asset of result.screenshots) {
     await writeFile(path.join(args.outputDir, "screenshots", asset.fileName), asset.bytes);
@@ -63,7 +74,9 @@ function parseArgs(args: string[]): CliArgs {
   const inputPath = readFlag(args, "--input") ?? "examples/literarytrip/input/metadata.json";
   const projectId = readFlag(args, "--project") ?? slugFromInputPath(inputPath);
   const outputDir = readFlag(args, "--output") ?? path.join("examples", projectId, "output");
-  return { inputPath, projectId, outputDir };
+  const styleReferenceId = readFlag(args, "--style-reference") ?? STANDARD_STYLE_REFERENCES[0]?.id ?? "sc-1";
+  const includeCoverScreen = args.includes("--cover");
+  return { inputPath, projectId, outputDir, styleReferenceId, includeCoverScreen };
 }
 
 function readFlag(args: string[], name: string): string | undefined {
@@ -77,6 +90,19 @@ function slugFromInputPath(inputPath: string): string {
   const examplesIndex = parts.indexOf("examples");
   if (examplesIndex >= 0 && parts[examplesIndex + 1]) return parts[examplesIndex + 1];
   return "app-project";
+}
+
+function withoutImagePayload(reference: StandardStyleReference): StandardStyleReference {
+  const metadata = { ...reference };
+  delete metadata.imageBase64;
+  return metadata;
+}
+
+async function loadStyleReference(styleReferenceId: string): Promise<StandardStyleReference> {
+  const reference = getStandardStyleReference(styleReferenceId);
+  if (!reference) throw new Error(`Unknown standard style reference '${styleReferenceId}'.`);
+  const bytes = await readFile(path.join(root, reference.path));
+  return { ...reference, imageBase64: Buffer.from(bytes).toString("base64") };
 }
 
 function createDefaultPatternLibrary(): PatternLibrary {

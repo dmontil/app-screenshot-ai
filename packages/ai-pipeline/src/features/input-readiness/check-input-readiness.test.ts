@@ -21,37 +21,26 @@ function validInput(overrides: Partial<AppInput> = {}): AppInput {
 }
 
 describe("CheckInputReadinessUseCase", () => {
-  it("blocks generation when fewer than three screenshots are provided", async () => {
+  it("blocks generation when no screenshots are provided", async () => {
     const useCase = new CheckInputReadinessUseCase();
 
-    const report = await useCase.execute(
-      validInput({
-        screenshots: [
-          { id: "home", path: "input/home.png", kind: "functional" },
-          { id: "search", path: "input/search.png", kind: "functional" },
-        ],
-      }),
-    );
+    const report = await useCase.execute(validInput({ screenshots: [] }));
 
     expect(report.status).toBe("blocked");
     expect(report.canGenerate).toBe(false);
     expect(report.issues).toContainEqual({
       code: "too_few_screenshots",
       severity: "error",
-      message: "Upload at least 3 distinct in-app screenshots.",
+      message: "Upload at least 1 in-app screenshot.",
     });
   });
 
-  it("blocks generation when fewer than two functional screenshots are provided", async () => {
+  it("blocks generation when no functional screenshots are provided", async () => {
     const useCase = new CheckInputReadinessUseCase();
 
     const report = await useCase.execute(
       validInput({
-        screenshots: [
-          { id: "launch", path: "input/launch.png", kind: "splash" },
-          { id: "logo", path: "input/logo.png", kind: "logo" },
-          { id: "home", path: "input/home.png", kind: "functional" },
-        ],
+        screenshots: [{ id: "launch", path: "input/launch.png", kind: "splash" }],
       }),
     );
 
@@ -60,7 +49,7 @@ describe("CheckInputReadinessUseCase", () => {
     expect(report.issues).toContainEqual({
       code: "too_few_functional_screenshots",
       severity: "error",
-      message: "Upload at least 2 screenshots with functional in-app UI visible.",
+      message: "Upload at least 1 screenshot with functional in-app UI visible.",
     });
   });
 
@@ -87,10 +76,12 @@ describe("CheckInputReadinessUseCase", () => {
     });
   });
 
-  it("allows generation when the input has enough functional screenshots", async () => {
+  it("allows generation with one functional screenshot", async () => {
     const useCase = new CheckInputReadinessUseCase();
 
-    const report = await useCase.execute(validInput());
+    const report = await useCase.execute(
+      validInput({ screenshots: [{ id: "home", path: "input/home.png", kind: "functional" }] }),
+    );
 
     expect(report).toEqual({
       status: "ready",
