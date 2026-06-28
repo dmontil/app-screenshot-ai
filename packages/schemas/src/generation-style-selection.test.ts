@@ -21,12 +21,16 @@ describe("GenerationStyleSelectionSchema", () => {
     ).toBe(false);
   });
 
-  it("exposes four repo-owned standard references with stable preview paths", () => {
+  it("exposes repo-owned standard references with stable preview paths", () => {
     expect(STANDARD_STYLE_REFERENCES.map((reference) => reference.id)).toEqual([
       "sc-1",
       "sc-2",
       "sc-3",
       "sc-4",
+      "sc-5",
+      "sc-6",
+      "sc-7",
+      "sc-8",
     ]);
     expect(STANDARD_STYLE_REFERENCES.every((reference) => StandardStyleReferenceSchema.safeParse(reference).success)).toBe(true);
     expect(getStandardStyleReference("sc-4")?.previewPath).toBe("/style-references/sc_4.jpeg");
