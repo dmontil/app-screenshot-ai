@@ -6,11 +6,12 @@ import { STANDARD_STYLE_REFERENCES } from "@app-screenshot-ai/schemas";
 
 import { analyzeLandingPage, approveCreatorWorkspaceScreen, updateCreatorWorkspaceLocaleScreens, type CreatorWorkspaceApp } from "./api-client";
 import { approvePackScreen, buildPackZipEntries, translatePackCopy, type PackScreenApproval } from "./pack-workspace-actions";
+import { StatusBanner } from "./status";
 import type { EditableStoryboard, GenerateResponse, LandingPageAnalysis, StoredAppInput, TextLayerOverride } from "./types";
 
 export { StudioHeader, StudioHero, StudioSidebar } from "./navigation";
 export { ProjectSwitcher } from "./project-switcher";
-export { PipelineStatus, StudioTopBar } from "./status";
+export { PipelineStatus, StatusBanner, StudioTopBar } from "./status";
 
 const categories = ["travel", "productivity", "fitness", "finance", "education", "utility", "social"];
 
@@ -921,10 +922,6 @@ export function AdvancedInspector({ result, storyboard }: { result: GenerateResp
       </details>
     </section>
   );
-}
-
-export function StatusBanner({ kind, children }: { kind: "error" | "success"; children: React.ReactNode }) {
-  return <section className={`status-banner ${kind}`} role={kind === "error" ? "alert" : "status"}>{children}</section>;
 }
 
 function InspectorBlock({ title, value }: { title: string; value: unknown }) {

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { GenerateResponse, ProjectSummary } from "./types";
 
 type StudioTopBarProps = {
@@ -42,6 +44,10 @@ export function PipelineStatus({ loading, result }: { loading: boolean; result: 
       </div>
     </section>
   );
+}
+
+export function StatusBanner({ kind, children }: { kind: "error" | "success"; children: ReactNode }) {
+  return <section className={`status-banner ${kind}`} role={kind === "error" ? "alert" : "status"}>{children}</section>;
 }
 
 function SectionHeader({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
