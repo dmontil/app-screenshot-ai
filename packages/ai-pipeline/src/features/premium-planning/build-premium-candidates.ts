@@ -64,7 +64,7 @@ function makeSplitHeavy(sceneSet: SceneSet): SceneSet {
     ...sceneSet,
     id: `${sceneSet.id}-split-heavy`,
     scenes: sceneSet.scenes.map((scene, index) => {
-      if (index === 0 || index === sceneSet.scenes.length - 1) return scene;
+      if (index === 0) return scene;
       const primary = scene.devices[0];
       const fallback = sceneSet.scenes.flatMap((candidate) => candidate.devices).find((device) => device.screenshotId !== primary?.screenshotId) ?? primary;
       if (!primary || !fallback) return scene;

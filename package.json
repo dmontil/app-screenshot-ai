@@ -16,6 +16,7 @@
     "test:ai-direct-pack": "tsx --env-file=.env.local scripts/test-ai-direct-pack.ts",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:coverage": "npm run test --workspaces --if-present -- --coverage",
     "lint": "npm run lint --workspaces --if-present"
   },
   "devDependencies": {
