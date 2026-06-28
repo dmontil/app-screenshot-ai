@@ -199,4 +199,3 @@ function pattern(category: string, conversionIntent: string, tone: string[]) {
     whyItWorks: ["Keeps the app UI visible.", "Uses short readable headlines.", "Maintains visual continuity."],
   };
 }
-
