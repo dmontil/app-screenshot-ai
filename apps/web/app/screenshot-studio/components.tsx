@@ -9,6 +9,7 @@ import { approvePackScreen, buildPackZipEntries, translatePackCopy, type PackScr
 import type { EditableStoryboard, GenerateResponse, LandingPageAnalysis, ProjectSummary, StoredAppInput, TextLayerOverride } from "./types";
 
 export { StudioHeader, StudioHero, StudioSidebar } from "./navigation";
+export { ProjectSwitcher } from "./project-switcher";
 
 const categories = ["travel", "productivity", "fitness", "finance", "education", "utility", "social"];
 
@@ -22,17 +23,6 @@ type ProviderSettingsProps = {
   onModelChange: (value: string) => void;
   onGeminiApiKeyChange: (value: string) => void;
   onOpenaiApiKeyChange: (value: string) => void;
-};
-
-type ProjectSwitcherProps = {
-  projects: ProjectSummary[];
-  selectedProjectId: string;
-  selectedGenerationId: string;
-  loadingGeneration: boolean;
-  onProjectChange: (value: string) => void;
-  onGenerationChange: (value: string) => void;
-  onLoad: () => void;
-  onRefresh: () => void;
 };
 
 type ScreenshotPreview = { name: string; size: number; type: string; url: string };
@@ -108,60 +98,6 @@ type StudioTopBarProps = {
   autoRerender: boolean;
   onDownload: () => void;
 };
-
-export function ProjectSwitcher(props: ProjectSwitcherProps) {
-  const selectedProject = props.projects.find((project) => project.projectId === props.selectedProjectId);
-
-  return (
-    <section className="panel project-switcher" id="projects">
-      <SectionHeader eyebrow="Projects" title="Continue a project or open a saved version" description="Projects are the workspace. Each project keeps source inputs, AI generations, manual rerenders, quality reports, and ZIP exports." />
-      {props.projects.length === 0 ? (
-        <div className="empty-projects">
-          <b>No projects yet.</b>
-          <p>Start a blank project or use the demo flow below to create your first local workspace.</p>
-        </div>
-      ) : (
-        <div className="project-card-grid">
-          {props.projects.slice(0, 6).map((project) => {
-            const isSelected = project.projectId === props.selectedProjectId;
-            return (
-              <button type="button" className={`project-card ${isSelected ? "selected" : ""}`} key={project.projectId} onClick={() => {
-                props.onProjectChange(project.projectId);
-                props.onGenerationChange(project.currentGenerationId ?? project.generations[0]?.generationId ?? "");
-              }}>
-                <span className="project-thumb" aria-hidden="true">
-                  {project.thumbnailDataUrl ? <img src={project.thumbnailDataUrl} alt="" /> : <span className="project-thumb-empty">No preview</span>}
-                </span>
-                <span className="project-card-body">
-                  <span className={`project-status ${project.status ?? "draft"}`}>{project.status ?? "draft"}</span>
-                  <b>{project.appName ?? project.projectId}</b>
-                  <small>{project.category ?? "uncategorized"} · {project.generations.length} version{project.generations.length === 1 ? "" : "s"}</small>
-                  <small>Updated {formatProjectDate(project.updatedAt)}</small>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <div className="grid two project-load-row">
-        <Field label="Selected version">
-          <select value={props.selectedGenerationId} onChange={(event) => props.onGenerationChange(event.target.value)} disabled={!selectedProject}>
-            <option value="">Choose a generation</option>
-            {selectedProject?.generations.map((generation) => (
-              <option value={generation.generationId} key={generation.generationId}>
-                {generation.label ?? generation.kind} · {new Date(generation.createdAt).toLocaleString()} · {generation.generationId}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <div className="actions align-end">
-          <button type="button" className="button primary" disabled={!props.selectedProjectId || !props.selectedGenerationId || props.loadingGeneration} onClick={props.onLoad}>{props.loadingGeneration ? "Opening..." : "Open in studio"}</button>
-          <button type="button" className="button secondary" onClick={props.onRefresh}>Refresh</button>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 export function StudioTopBar(props: StudioTopBarProps) {
   const projectName = props.result?.projectId ?? props.selectedProject?.appName ?? props.selectedProject?.projectId ?? "No project open";
@@ -1049,13 +985,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function formatFileSize(size: number) {
   if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatProjectDate(value: string | undefined) {
-  if (!value) return "unknown";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "unknown";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function Step({ active, label, title, detail }: { active?: boolean; label: string; title: string; detail: string }) {
