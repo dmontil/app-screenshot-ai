@@ -26,6 +26,7 @@ import {
 import { CheckInputReadinessUseCase } from "../input-readiness";
 import { BuildPremiumCandidateSceneSetsUseCase, BuildPremiumProjectContextUseCase, type LandingPageLoaderPort } from "../premium-planning";
 import { storyboardTaskContract, styleReferenceAnalysisTaskContract, visualSystemTaskContract } from "./ai-task-contracts";
+import { selectBestPremiumCandidate } from "./premium-candidate-selection";
 
 export class GenerateStorePackError extends Error {
   readonly code: "input_not_ready";
@@ -706,22 +707,4 @@ function treatmentForComposition(composition: SceneSet["scenes"][number]["compos
   if (composition === "panoramic-sequence") return "map-route-editorial";
   if (composition === "cropped-edge-device" || composition === "before-after") return "callout-zoom";
   return "hero-device";
-}
-
-function selectBestPremiumCandidate(
-  candidates: Array<{ variant: string; sceneSet: SceneSet; qualityReport: QualityReport }>,
-): { variant: string; sceneSet: SceneSet; qualityReport: QualityReport } | undefined {
-  return [...candidates].sort((a, b) => {
-    const scoreDelta = (b.qualityReport.premium?.score ?? 0) - (a.qualityReport.premium?.score ?? 0);
-    if (scoreDelta !== 0) return scoreDelta;
-    return variantPriority(b.variant) - variantPriority(a.variant);
-  })[0];
-}
-
-function variantPriority(variant: string): number {
-  if (variant === "director-cut") return 5;
-  if (variant === "object-rich") return 4;
-  if (variant === "split-heavy") return 3;
-  if (variant === "dark-premium") return 2;
-  return 1;
 }
