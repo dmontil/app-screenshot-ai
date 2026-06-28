@@ -202,12 +202,48 @@ Recommended implementation order:
 7. `render-engine`: renders one `ScreenPlan` to target dimensions.
 8. `export-engine`: creates manifest and ZIP folder structure.
 
+## React / Next.js application module shape
+
+The web app should keep Next.js entrypoints thin. A page or route handler is an adapter, not the place where product workflow logic should accumulate.
+
+Preferred app shape:
+
+```txt
+apps/web/app/**                 # Next.js route/page adapters
+apps/web/app/screenshot-studio/ # Current feature modules during migration
+  *-view-model.ts               # Pure derived UI state, tested directly
+  *-actions.ts                  # Client-side behavior helpers, tested directly
+  *.tsx                         # UI rendering modules
+apps/web/app/api/**             # HTTP adapters plus small tested route utilities
+```
+
+Rules:
+
+- `page.tsx` should compose feature modules and own as little derived logic as possible.
+- UI-only modules may import React and browser APIs.
+- View-model modules should be pure TypeScript and tested without rendering React.
+- Route handlers should parse HTTP input, call application/session modules, and present responses; parsing/default helpers should live in tested route utility modules.
+- Do not introduce a seam until there is real variation or test leverage. One adapter is hypothetical; two adapters make the seam real.
+
+## Refactor guardrails
+
+Refactors should move in tiny, behavior-preserving steps:
+
+1. Establish green verification before moving code.
+2. Extract pure view-model or route utility logic first.
+3. Add tests at the new public interface.
+4. Preserve the old import surface temporarily with re-exports when that keeps a PR reviewable.
+5. Split visual/UI moves from behavior changes.
+6. Keep known lint warnings visible until the module owning them is actively refactored.
+
 ## Code review checklist
 
 - [ ] Behavior is covered through a public interface.
 - [ ] Domain/application code does not import framework or provider SDKs.
-- [ ] New abstraction removes real duplication or protects a real boundary.
+- [ ] New abstraction removes real duplication or protects a real seam.
 - [ ] Generated AI output is schema-validated.
 - [ ] Errors are domain/provider normalized.
 - [ ] File/module has one clear reason to change.
 - [ ] Core logic is app-agnostic.
+- [ ] Next.js pages and route handlers remain thin adapters.
+- [ ] View-model logic is tested without rendering React when possible.
